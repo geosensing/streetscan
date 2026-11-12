@@ -20,6 +20,7 @@ road class captures it.
 import numpy as np
 import pandas as pd
 from geoestimate import Sample
+from scipy.spatial import cKDTree
 
 ROAD_CLASSES = {
     "residential": "residential",
@@ -142,3 +143,47 @@ def shift_interval(data, by, shares, cluster, numerator, denominator, seed, reps
         draws.append(shift(pd.concat([groups[i] for i in picked], ignore_index=True)))
     low, high = np.quantile(draws, [0.025, 0.975])
     return {"estimate": shift(on_frame), "conf_low": low, "conf_high": high}
+
+
+EARTH_RADIUS_M = 6371000
+
+
+def metres_to_nearest(lat, lon, target_lat, target_lon):
+    """Distance from each position to the nearest target, in metres.
+
+    Positions are projected onto a plane tangent at the targets' centre, which
+    is accurate to well under a metre across a city.
+    """
+    lat0 = np.radians(np.mean(target_lat))
+
+    def project(latitude, longitude):
+        x = EARTH_RADIUS_M * np.radians(longitude) * np.cos(lat0)
+        y = EARTH_RADIUS_M * np.radians(latitude)
+        return np.column_stack([x, y])
+
+    tree = cKDTree(project(np.asarray(target_lat), np.asarray(target_lon)))
+    distance, _ = tree.query(project(np.asarray(lat), np.asarray(lon)))
+    return distance
+
+
+def cluster_bootstrap_difference(data, group, cluster, numerator, denominator, seed):
+    """Difference in a ratio between two groups of rows, resampling clusters.
+
+    ``group`` is a boolean column; the difference is True minus False.
+    """
+
+    def difference(rows):
+        inside, outside = rows[rows[group]], rows[~rows[group]]
+        return (
+            inside[numerator].sum() / inside[denominator].sum()
+            - outside[numerator].sum() / outside[denominator].sum()
+        )
+
+    groups = [rows for _, rows in data.groupby(cluster)]
+    rng = np.random.default_rng(seed)
+    draws = []
+    for _ in range(2000):
+        picked = rng.integers(0, len(groups), size=len(groups))
+        draws.append(difference(pd.concat([groups[i] for i in picked])))
+    low, high = np.nanquantile(draws, [0.025, 0.975])
+    return {"difference": difference(data), "conf_low": low, "conf_high": high}

@@ -8,6 +8,8 @@ from streetscan.designs import (
     as_row,
     class_shares,
     clean_noise,
+    cluster_bootstrap_difference,
+    metres_to_nearest,
     post_stratified,
     road_class,
     shift_interval,
@@ -24,6 +26,9 @@ STREETSENSE_OUTCOMES = [
 ]
 NOISE_THRESHOLDS = {"min_db": 55, "max_db": 100}
 SPEED_FLOORS = [0.1, 1.0]
+NEAR_M = 100
+# Navi Mumbai drew 10,000 points, so almost every frame there is near one.
+MIN_GROUP_FRAMES = 20
 SEED = 20261112
 
 
@@ -189,6 +194,76 @@ def gopro():
     return rows, pd.DataFrame(mix)
 
 
+def within_class():
+    """Do streets ridden between sampled points resemble the sampled streets?
+
+    Reweighting by road class assumes they do. Frames within NEAR_M of a
+    sampled point are on or beside a sampled street; the rest are on the way.
+    """
+    frames = read_raw("gopro_images.csv").query("gps_valid")
+    points = read_raw("gopro_sample_points.csv")
+    frames["road_class"] = road_class(frames["osm_highway"])
+    frames["people"] = frames["total_pedestrians"]
+    frames["one"] = 1
+    rows = []
+    for city, data in frames.groupby("city", sort=False):
+        drawn = points[points["city"] == city]
+        data = data.assign(
+            near=metres_to_nearest(
+                data["gps_lat"], data["gps_lon"], drawn["lat"], drawn["lon"]
+            )
+            <= NEAR_M
+        )
+        for name, in_class in data.groupby("road_class"):
+            near, far = in_class[in_class["near"]], in_class[~in_class["near"]]
+            if name == "other" or min(len(near), len(far)) < MIN_GROUP_FRAMES:
+                continue
+            for outcome, numerator, denominator in [
+                ("women_share", "women_count", "people"),
+                ("pedestrians_per_frame", "people", "one"),
+            ]:
+                rows.append(
+                    {
+                        "city": city,
+                        "road_class": name,
+                        "outcome": outcome,
+                        "near": near[numerator].sum() / near[denominator].sum(),
+                        "far": far[numerator].sum() / far[denominator].sum(),
+                        "near_frames": len(near),
+                        "far_frames": len(far),
+                        **cluster_bootstrap_difference(
+                            in_class,
+                            "near",
+                            "collection_day",
+                            numerator,
+                            denominator,
+                            SEED,
+                        ),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def streetview_by_class():
+    """Women's share by road class at sampled Street View locations."""
+    locations = read_raw("streetview_locations.csv")
+    locations["road_class"] = road_class(locations["osm_type"])
+    rows = []
+    for (city, name), coded in locations.groupby(["city", "road_class"]):
+        if len(coded) < 2 or coded["total_pedestrians"].sum() == 0:
+            continue
+        rows.append(
+            as_row(
+                Sample(coded).ratio("women_count_num", "total_pedestrians"),
+                application="streetview",
+                city=city,
+                estimator=f"class: {name}",
+                outcome="women_share",
+            )
+        )
+    return rows
+
+
 def delhi_sensor_rows(readings, shares, application, outcomes, thresholds):
     # A day shares a rider, weather and part of the city across its itineraries.
     by_route = {"cluster": "day"}
@@ -248,9 +323,15 @@ def air():
 streetsense_rows, coverage = streetsense()
 gopro_rows, road_mix = gopro()
 estimates = pd.DataFrame(
-    streetsense_rows + streetview_women() + gopro_rows + noise() + air()
+    streetsense_rows
+    + streetview_women()
+    + streetview_by_class()
+    + gopro_rows
+    + noise()
+    + air()
 )
 # Ten significant digits, so the file is identical across platforms.
 estimates.to_csv(TABLE_DIR / "estimates.csv", index=False, float_format="%.10g")
 coverage.to_csv(TABLE_DIR / "streetsense_coverage.csv", index=False)
 road_mix.to_csv(TABLE_DIR / "gopro_road_mix.csv", index=False, float_format="%.10g")
+within_class().to_csv(TABLE_DIR / "within_class.csv", index=False, float_format="%.10g")

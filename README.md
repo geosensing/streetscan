@@ -25,7 +25,9 @@ Drawing points at random is not enough when the instrument rides between them. I
 
 ![Women's share of pedestrians under each weighting of the video frames, and from Street View](figs/women.png)
 
-Across cities and weightings, women are 18% to 28% of pedestrians. The reweighted estimates rest on an assumption the design does not guarantee: that within a road class, the streets a route uses resemble those it does not.
+Across cities and weightings, women are 18% to 28% of pedestrians.
+
+A route sample is still a probability sample. A stretch of road is photographed at a rate proportional to how often the routing rule sends the rider along it, divided by the rider's speed there; weighting by the inverse of that rate is unbiased, and reweighting by road class approximates it. Within road classes, frames beside sampled points and frames on the way between them show similar shares of women.
 
 ## Reproduce
 
@@ -34,7 +36,7 @@ make restore
 make check
 ```
 
-The manuscript needs pdfLaTeX and latexmk. Every result in the text comes from `tabs/macros.tex`, which `scripts/05_tables.py` writes from the analysis output.
+The manuscript needs pdfLaTeX and latexmk. Every result in the text comes from `tabs/macros.tex`, which `scripts/06_tables.py` writes from the analysis output.
 
 ## Files and pipeline
 
@@ -55,5 +57,6 @@ The manuscript needs pdfLaTeX and latexmk. Every result in the text comes from `
 | `01_prepare_data.py` | Check raw tables against their hashes |
 | `02_estimate.py` | Estimate every reported quantity under each design |
 | `03_simulate.py` | Check the estimators in a simulated city with a known truth |
-| `04_figures.py` | Draw the figures |
-| `05_tables.py` | Write the tables and the macros the manuscript cites |
+| `04_simulate_routes.py` | Check, on a street grid, that a route sample is a probability sample with a computable rate of inclusion |
+| `05_figures.py` | Draw the figures |
+| `06_tables.py` | Write the tables and the macros the manuscript cites |

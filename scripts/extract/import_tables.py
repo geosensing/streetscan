@@ -296,6 +296,46 @@ def streetsense_segments():
     return pd.concat(frames, ignore_index=True)
 
 
+# city: folder of frames saved from its videos, as listed when the images were
+# moved to external storage. Bangalore and Delhi frames were all annotated.
+SAVED_FRAME_MANIFESTS = {
+    "mumbai": "streetscope__data__annotation_task__annotation_frames.json",
+    "navi_mumbai": "streetscope__data__annotation_task__annotation_frames_new.json",
+}
+
+
+def gopro_extracted_frames(images):
+    """Per video, how many frames were saved and how many of those were annotated."""
+    frames = []
+    for city, manifest in SAVED_FRAME_MANIFESTS.items():
+        with open(SIBLINGS / "storage-migration-2026-11-10" / manifest) as handle:
+            files = [entry["path"] for entry in json.load(handle)["files"]]
+        saved = pd.Series([name for name in files if name.endswith(".jpg")])
+        annotated = set(images.loc[images["city"] == city, "image"])
+        table = pd.DataFrame(
+            {
+                "video": saved.str.replace(r"_frame\d+\.jpg$", "", regex=True),
+                "index": saved.str.extract(r"_frame(\d+)\.jpg$")[0].astype(int),
+                "annotated": saved.isin(annotated),
+            }
+        )
+        # Whether a frame falls in the first half of its video's saved frames,
+        # to check that annotation did not favour the start or end of a ride.
+        table["early"] = table.groupby("video")["index"].rank(pct=True) <= 0.5
+        counts = table.groupby("video").agg(
+            saved=("annotated", "size"),
+            annotated=("annotated", "sum"),
+            saved_early=("early", "sum"),
+            annotated_early=(
+                "annotated",
+                lambda a: (a & table.loc[a.index, "early"]).sum(),
+            ),
+        )
+        counts.insert(0, "city", city)
+        frames.append(counts.reset_index())
+    return pd.concat(frames, ignore_index=True)
+
+
 def main():
     tables = {
         "gopro_images.csv": gopro_images(),
@@ -305,6 +345,9 @@ def main():
         "streetsense_segments.csv": streetsense_segments(),
         **streetview_tables(),
     }
+    tables["gopro_extracted_frames.csv"] = gopro_extracted_frames(
+        tables["gopro_images.csv"]
+    )
     for name, table in tables.items():
         table.to_csv(RAW_DIR / name, index=False)
         print(f"{name}: {len(table):,} rows, {table.shape[1]} columns")

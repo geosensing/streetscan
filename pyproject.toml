@@ -12,6 +12,7 @@ authors = [
 dependencies = [
     "geoestimate",
     "matplotlib",
+    "networkx>=3.7",
     "numpy",
     "pandas",
     "pyarrow",

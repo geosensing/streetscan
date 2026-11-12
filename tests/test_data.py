@@ -87,3 +87,14 @@ def test_sample_sizes():
     }
     routed = read_raw("gopro_sample_points.csv").dropna(subset=["itinerary_id"])
     assert (routed["city"] == "navi_mumbai").sum() == 8126
+
+
+def test_navi_mumbai_annotation_rate_is_even_across_videos():
+    """A random subset of saved frames has the same rate in every video."""
+    from scipy import stats
+
+    videos = read_raw("gopro_extracted_frames.csv").query("city == 'navi_mumbai'")
+    rate = videos["annotated"].sum() / videos["saved"].sum()
+    expected = videos["saved"] * rate
+    chi2 = ((videos["annotated"] - expected) ** 2 / (expected * (1 - rate))).sum()
+    assert stats.chi2.sf(chi2, len(videos) - 1) > 0.05

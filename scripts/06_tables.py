@@ -7,9 +7,9 @@ from streetscan.config import TABLE_DIR
 from streetscan.designs import MIN_SPEED_MPS, clean_noise, road_class
 from streetscan.paper import count, write_macros, write_table
 from streetscan.sources import read_raw
-from streetscan.style import CITY_LABELS, CITY_ORDER
+from streetscan.style import CITY_LABELS, CITY_ORDER, ROAD_CLASS_LABELS
 
-SOURCE = "scripts/05_tables.py"
+SOURCE = "scripts/06_tables.py"
 estimates = pd.read_csv(TABLE_DIR / "estimates.csv")
 estimates["city_key"] = estimates["city"].str.lower().str.replace(" ", "_")
 road_mix = pd.read_csv(TABLE_DIR / "gopro_road_mix.csv")
@@ -322,5 +322,111 @@ write_table(
         "Coverage (\\%)",
     ],
 )
+
+# A route sample on a street grid, with the design's traversal intensity known.
+route = pd.read_csv(TABLE_DIR / "route_simulation.csv").set_index("estimator")
+route_check = pd.read_csv(TABLE_DIR / "route_simulation_check.csv")
+route_check = route_check.set_index("quantity")["value"]
+ROUTE_ROWS = {
+    "per minute": "Per minute",
+    "per metre": "Per metre (speed weights)",
+    "road network": "Speed weights, reweighted by road class",
+    "design weights": "Design weights (speed over traversal intensity)",
+}
+route_rows = []
+for estimator, label in ROUTE_ROWS.items():
+    row = route.loc[estimator]
+    route_rows.append(
+        [
+            label,
+            percent(row["mean_estimate"]),
+            signed(100 * row["bias"]),
+            percent(row["sd_estimate"]),
+        ]
+    )
+    macros[f"grid bias {estimator}"] = f"{abs(100 * row['bias']):.1f}"
+macros["grid streets"] = str(int(route_check["streets"]))
+macros["grid truth"] = percent(route["truth"].iloc[0])
+macros["grid frames ratio"] = f"{route_check['frames_observed_over_predicted']:.3f}"
+macros["grid frames correlation"] = f"{route_check['frames_correlation']:.2f}"
+macros["grid intensity ratio"] = (
+    f"{route_check['intensity_major_over_residential']:.1f}"
+)
+macros["grid intensity spread"] = f"{route_check['intensity_max_over_min']:.0f}"
+write_table(
+    route_rows,
+    TABLE_DIR / "route_simulation.tex",
+    "lrrr",
+    ["", "Mean (\\%)", "Bias (pp)", "SD (pp)"],
+)
+
+# Within a road class, frames beside a sampled point against frames on the way.
+within = pd.read_csv(TABLE_DIR / "within_class.csv")
+share = within[within["outcome"] == "women_share"]
+within_rows = []
+for city in CITY_ORDER:
+    for _, row in share[share["city"] == city].iterrows():
+        low, high = signed(100 * row["conf_low"]), signed(100 * row["conf_high"])
+        within_rows.append(
+            [
+                CITY_LABELS[city],
+                ROAD_CLASS_LABELS[row["road_class"]],
+                count(int(row["near_frames"])),
+                count(int(row["far_frames"])),
+                percent(row["near"]),
+                percent(row["far"]),
+                f"{signed(100 * row['difference'])} [{low}, {high}]",
+            ]
+        )
+write_table(
+    within_rows,
+    TABLE_DIR / "within_class.tex",
+    "llrrrrc",
+    [
+        "",
+        "Road class",
+        "Frames near",
+        "Frames far",
+        "Near (\\%)",
+        "Far (\\%)",
+        "Difference (pp)",
+    ],
+)
+excludes_zero = (share["conf_low"] > 0) | (share["conf_high"] < 0)
+macros["within cells"] = str(len(share))
+macros["within cells excluding zero"] = str(int(excludes_zero.sum()))
+macros["within difference min"] = signed(100 * share["difference"].min())
+macros["within difference max"] = signed(100 * share["difference"].max())
+weights = share["near_frames"] + share["far_frames"]
+macros["within difference mean"] = signed(
+    100 * (share["difference"] * weights).sum() / weights.sum()
+)
+half_widths = 100 * (share["conf_high"] - share["conf_low"]) / 2
+macros["within half width min"] = f"{half_widths.min():.0f}"
+macros["within half width max"] = f"{half_widths.max():.0f}"
+
+# Annotated frames as a share of the frames saved, where saved frames are listed.
+extracted = read_raw("gopro_extracted_frames.csv")
+for city, videos in extracted.groupby("city"):
+    key = macro_key(city)
+    macros[f"saved frames {key}"] = count(int(videos["saved"].sum()))
+    macros[f"annotated share {key}"] = percent(
+        videos["annotated"].sum() / videos["saved"].sum(), 0
+    )
+    partial = videos[
+        (videos["annotated"] > 0) & (videos["annotated"] < videos["saved"])
+    ]
+    late = partial["saved"] - partial["saved_early"]
+    macros[f"annotated early {key}"] = percent(
+        partial["annotated_early"].sum() / partial["saved_early"].sum(), 0
+    )
+    macros[f"annotated late {key}"] = percent(
+        (partial["annotated"] - partial["annotated_early"]).sum() / late.sum(), 0
+    )
+    macros[f"videos {key}"] = str(len(videos))
+    macros[f"videos full {key}"] = str(
+        int((videos["annotated"] == videos["saved"]).sum())
+    )
+    macros[f"videos none {key}"] = str(int((videos["annotated"] == 0).sum()))
 
 write_macros(macros, TABLE_DIR / "macros.tex", SOURCE)
