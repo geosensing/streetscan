@@ -250,6 +250,7 @@ gopro_rows, road_mix = gopro()
 estimates = pd.DataFrame(
     streetsense_rows + streetview_women() + gopro_rows + noise() + air()
 )
-estimates.to_csv(TABLE_DIR / "estimates.csv", index=False)
+# Ten significant digits, so the file is identical across platforms.
+estimates.to_csv(TABLE_DIR / "estimates.csv", index=False, float_format="%.10g")
 coverage.to_csv(TABLE_DIR / "streetsense_coverage.csv", index=False)
-road_mix.to_csv(TABLE_DIR / "gopro_road_mix.csv", index=False)
+road_mix.to_csv(TABLE_DIR / "gopro_road_mix.csv", index=False, float_format="%.10g")

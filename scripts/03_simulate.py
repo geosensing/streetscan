@@ -133,4 +133,4 @@ summary = draws.groupby("design", sort=False).agg(
 )
 summary.insert(0, "truth", truth)
 summary["bias"] = summary["mean_estimate"] - truth
-summary.to_csv(TABLE_DIR / "simulation.csv")
+summary.to_csv(TABLE_DIR / "simulation.csv", float_format="%.10g")
