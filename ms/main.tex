@@ -8,6 +8,8 @@
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{float}
+\usepackage{graphicx}
+\usepackage{adjustbox}
 \usepackage{enumitem}
 \usepackage{setspace}
 \usepackage{natbib}
@@ -18,10 +20,10 @@
 \setlist[itemize]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=18pt}
 \setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=18pt}
 
+\graphicspath{{../figs/}}
+\input{../tabs/macros.tex}
+
 \newtheorem{proposition}{Proposition}
-\newtheorem{assumption}{Assumption}
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcommand{\E}{\mathbb{E}}
 \newcommand{\V}{\mathbb{V}}
 \newcommand{\ind}{\mathbb{1}}
 \newcommand{\Rhat}{\widehat{R}}
@@ -33,223 +35,263 @@
 
 \title{Sampling Streets:\\
 Design-Based Inference for Street-Level Field Measurement}
-\author{Varun K.R. \and Gaurav Sood\thanks{Replication materials, including the spatial sampler, the routing allocator, the GoPro and Street View imagery pipelines, the sound meter pipeline, and the inference package, are at \url{https://github.com/geosensing}.}}
-\date{May 2026}
+\author{Varun K.R. \and Gaurav Sood\thanks{Data and code to reproduce every number in this paper are at \url{https://github.com/geosensing/streetscan}. The sampler, the route allocator, and the estimation package are at \url{https://github.com/geosensing}.}}
+\date{November 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-
-Researchers increasingly use street-level field measurements  to study policy and political outcomes, from infrastructure quality and ambient and sound pollution to gendered public presence. Often, the data come from a convenience corpus rather than a probability sample: access determines where data are collected, and access often correlates with the outcomes measured. As a result, estimates are reported without a clearly defined estimand or a design-based standard error.
-
-In this paper, we develop and introduce a probability-sampling framework for street-level field measurement.
-This framework constructs a sampling frame from the road network, allocates sampled units into field itineraries or independent random walks, and produces design-based estimates with variance estimators for simple random, stratified, clustered, and walk-based designs. Acquisition modes include researcher-collected imagery, researcher-deployed sensors such as sound meters, and platform imagery such as Google Street View; each is treated as a measurement instrument with its own coverage, time, and bias properties. Platform imagery faces three measurement-relevant constraints in particular: obfuscation of faces and plates, collection at platform-determined times rather than researcher-randomized times, and image dates that may lag the question by years. We illustrate with two applications: women's presence in public space across Mumbai, Navi Mumbai, and Delhi using both researcher-collected and platform imagery, and street-level noise exposure across Delhi using sound meters. The framework brings image- and sensor-based political measurement into the standard machinery of survey inference.
+Researchers measure streets with cameras and sensors: the condition of roads, who is visible in public, how loud and how polluted the street is. The data usually come from wherever access was easy, so the numbers describe the places measured and not the city. We describe what it takes to make such a measurement a statement about a city: a list of road segments to draw from, a random draw, and standard errors that follow from the draw. We then show that drawing points at random is not enough. When the observed unit is the drawn unit, as when a Street View image is requested at a sampled segment, the design carries over and only coverage needs care. When a field team rides between sampled points with a camera or a meter, the observations describe the route, not the sample: routes run on bigger roads than the points sit on, and a camera cut at fixed time intervals photographs slow stretches more often. In Delhi, \sampleresidentialDelhi\% of sampled points but \frameresidentialDelhi\% of video frames are on residential roads. Weighting frames by speed and reweighting road classes to the drawn sample moves the estimated share of women among pedestrians in Delhi from \videoDelhiperminuteofriding\% to \videoDelhiroadnetwork\%, and the share of noise readings peaking at or above 100~dB from \noiseasreadmaxatleastOneZeroZero\% to \noiseroadnetworkmaxatleastOneZeroZero\%. In a simulation with a known truth, intervals from the unadjusted route sample cover the truth \simcoveragerouteperminute\% of the time and the adjusted ones \simcoveragerouteroadnetwork\%. We apply the framework to road condition in four cities, women's presence on the street in four Indian cities, and noise and air quality in Delhi.
 \end{abstract}
 
 \section{Introduction}
 
-Field measurements at sampled street locations are an increasingly common source of data for political and social science. Researchers measure neighborhood disorder, sidewalk infrastructure, traffic conditions, urban inequality, and visible composition of public space from street-level imagery \citep{rundle2011streetview,kelly2013streetview,naik2014streetscore,gebru2017streetview}, and they measure environmental quantities such as noise, particulate matter, and temperature from spatially distributed sensors. Most of this work draws on data that are convenient: large platform corpora such as Google Street View, single-city censuses of named blocks, sensor placements at fixed monitoring stations, or routes the researcher can reach. The convenience corpus delivers volume, but it does not deliver an estimand. The resulting numbers describe what is in the corpus rather than what is in the city, and standard errors, when reported, typically treat units as independent draws from a hypothetical superpopulation rather than as design-based samples from the actual road network.
+Measurements taken on the street are an increasingly common source of data in the social sciences. Researchers code neighborhood disorder, road and sidewalk condition, and the composition of public space from street-level imagery \citep{rundle2011streetview,kelly2013streetview,naik2014streetscore,gebru2017streetview}, and they measure noise, particulate matter, and temperature with sensors. Most of this work draws on data that are convenient: a platform's image corpus, a census of named blocks, monitors at fixed stations, or routes a team could reach. Convenient data deliver volume. They do not say what population the numbers describe, and standard errors computed from them treat observations as independent draws from an unspecified population.
 
-We develop a probability-sampling framework for street-level field measurement. The frame is constructed from the road network. Sampling is randomized over street segments or independent random walks. Allocation to field collection is treated as an operational step, not a sampling step. Estimation is design-based. The framework supports three acquisition modes: researcher-collected imagery, suitable when visual outcomes vary with time of day and current conditions; researcher-deployed sensors, suitable when the quantity of interest is a continuous physical measurement; and platform imagery, suitable when outcomes change slowly and the platform's coverage and date metadata are appropriate to the question. Coverage and nonresponse are part of the design rather than a robustness exercise.
+Survey sampling has a standard answer. List the units of the population, draw some at random with known probabilities, and weight each observation by the inverse of its probability of being drawn \citep{horvitz1952generalization,cochran1977sampling,lohr2019sampling}. For streets, the list can be built from the road network: OpenStreetMap roads \citep{openstreetmap} cut into short segments. We built tools to do this: a sampler that cuts roads into segments and draws from them, an allocator that groups sampled points into routes a field team can ride in a day, and an estimation package.
 
-We illustrate the framework with two applications. The first is women's presence in public space, an outcome motivated by the long-running concern that women are underrepresented in everyday public life \citep{sen1990missing,phadke2011whyloiter}. The second is street-level noise exposure in Delhi, an outcome motivated by environmental-health evidence that road-traffic noise affects sleep, cardiovascular health, cognition, and annoyance \citep{whoGuidelines2018,whoCompendium2022}. The two applications use different acquisition modes (imagery and sound meters), produce different estimands (a population ratio and a population mean), and share the same sampling and inference machinery.
+This paper makes two points. The first is that the standard machinery applies directly, and easily, when the unit observed is the unit drawn. If an image is requested at the start of each sampled segment, each image stands for the segments the draw says it stands for. The remaining problem is coverage: some sampled segments have no image.
 
-The methodological contribution is to bring image- and sensor-based political measurement into the standard machinery of survey inference. The applied contribution is a pair of design-based estimates that are explicitly tied to the road network sampled, the time windows during which collection occurred, and the measurement instrument used.
+The second point is a correction to our own practice. When a field team rides between sampled points with a camera that is always recording, or stops to read a meter where it is convenient to stop, the observations are not at the sampled points. The sample fixes a route, and the data describe the route. A route differs from the road network in two ways that the data can show and partly repair. Routes between points run on bigger roads than the points sit on. And a camera that saves a frame every few seconds photographs a stretch of road in proportion to the time spent on it, so slow stretches, which are also the crowded ones, are over-represented. We work out what each of these does, give estimators that undo them, check the estimators in a simulation with a known truth, and report how much the corrections move estimates in practice.
+
+We use five applications. Road condition in Bangkok, Jakarta, Lagos, and Wayne County, Michigan, comes from Street View images at sampled segments. Women's share of pedestrians comes from Street View at sampled locations in Mumbai, Navi Mumbai, and Delhi, and from video recorded on a motorbike in those cities and Bangalore, an outcome motivated by the concern that women are underrepresented in everyday public life \citep{sen1990missing,phadke2011whyloiter}. Noise and air quality in Delhi come from hand-held meters read along the same routes; road-traffic noise affects sleep, cardiovascular health, and cognition \citep{whoGuidelines2018,whoCompendium2022}.
 
 \section{Estimands}
 
-\subsection{General setup}
-
-Let $i \in \universe = \{1, \ldots, \Npop\}$ index finite population units. A unit may be a road segment, a camera heading at a road segment, a sound meter reading at a road-segment-by-time cell, or a sampled point along an allocated route. For unit $i$, let $Y_i$ denote a numeric measurement and, when relevant, $Z_i$ a corresponding denominator measurement. The interpretation of $Y_i$ and $Z_i$ depends on the application. For street imagery counting visible people by gender, $Y_i = W_i$ is the number of women visible and $Z_i = H_i = W_i + M_i$ is the number of classified persons. For sound measurement, $Y_i$ is a continuous reading (e.g., the maximum decibel level within a fixed measurement window) and no denominator is used.
-
-\subsection{Three estimands}
-
-Three estimands cover the applications considered here.
+Let $i \in \universe = \{1, \ldots, \Npop\}$ index the units of a finite population, here segments of the road network. For unit $i$, $Y_i$ is a measurement and, where relevant, $Z_i$ a denominator. For counts of people by gender, $Y_i$ is the number of women visible and $Z_i$ the number of people classified as women or men. For a sound-meter reading, $Y_i$ is a level in decibels and there is no denominator.
 
 The \emph{population ratio} is
 \begin{equation}
     R = \frac{\sum_{i \in \universe} Y_i}{\sum_{i \in \universe} Z_i}.
 \end{equation}
-For the imagery application, $R$ is the people-weighted female share: the share of all visible people in the target population who are annotated as women. It weights each location by the number of people present, so a market with two hundred visible people contributes more than a quiet side street with two.
+For images, $R$ is the share of visible people who are women. A market with two hundred people counts a hundred times as much as a side street with two.
 
-The \emph{population mean} is
+The \emph{population mean} is $\mu = \Npop^{-1} \sum_{i \in \universe} Y_i$: for noise, the sound level at a segment drawn at random. The \emph{threshold share} is
 \begin{equation}
-    \mu = \frac{1}{\Npop} \sum_{i \in \universe} Y_i.
+    P_\tau = \frac{1}{\Npop} \sum_{i \in \universe} \ind\{Y_i \geq \tau\},
 \end{equation}
-For the noise application, $\mu$ is the expected sound level at a randomly drawn unit in the target population. It is the natural design-based analogue of ``how loud is the average street'' when the unit is a sampled point on the road network.
+the share of segments at or above a level $\tau$. For noise we use $\tau = 55$~dB, the daytime ambient standard for residential areas under India's Noise Pollution Rules \citep{indiaNoiseRules2000}, for the quietest moment in a reading, and $\tau = 100$~dB for the loudest.
 
-The \emph{population threshold-exceedance share} is
-\begin{equation}
-    P_\tau = \frac{1}{\Npop} \sum_{i \in \universe} \ind\{Y_i \geq \tau\}.
-\end{equation}
-$P_\tau$ answers ``what share of sampled units register at or above $\tau$,'' a useful estimand for outcomes with regulatory thresholds. For the noise application, $\tau = 55$ dB corresponds to the daytime residential ambient standard under India's Noise Pollution Rules, and $P_{55}$ has a direct policy interpretation.
-
-A fourth quantity, the location-weighted mean of a per-unit ratio,
+A fourth quantity, the \emph{location mean} of a per-unit ratio,
 \begin{equation}
     L = \frac{1}{\Npop^+} \sum_{i \in \universe: Z_i > 0} \frac{Y_i}{Z_i},
 \end{equation}
-where $\Npop^+$ counts nonempty units, is the mean of a per-unit female share across nonempty street locations. $L$ weights a quiet side street with two people the same as a market with two hundred. Reporting $R$ and $L$ together is informative because their divergence carries content. A higher $R$ than $L$ means that busier locations have proportionally more women; a lower $R$ than $L$ means that high-traffic locations are especially male dominated.
+counts a side street the same as a market. $R$ below $L$ would mean that crowded places are more male.
 
-A fifth quantity ties any of the above to a benchmark. For the imagery application, let $B$ be a chosen baseline female share derived from census sex ratios, age-adjusted local populations, labor-force participation, transit ridership, or a matched-city comparison. The public-presence gap is $G = R - B$; a negative $G$ means that women are underrepresented in public space relative to the benchmark.
+All four are defined over segments. Whether data estimate them depends on how the data were collected, which is the subject of the next section. A camera that saves a frame every minute estimates what a rider sees per minute. That is a well-defined quantity, but it is not $R$.
 
-\section{Sampling Design}
+\section{Two Designs}
 
-\subsection{The spatial frame}
+\subsection{The frame}
 
-Let the city road network be represented as a finite collection of eligible street segments. The eligible network is defined by road classes, such as primary, secondary, tertiary, residential, and unclassified roads under the OpenStreetMap classification \citep{openstreetmap}. Roads are split into approximately half-kilometer segments, segment coordinates are recorded, and segment rows constitute the sampling frame. The frame is finite, enumerable, and reproducible from the OSM extract.
+The frame is a list of road segments. Roads of chosen classes are taken from OpenStreetMap and cut into pieces of about 500 meters; each piece is a row. The frame says what the estimate is about. A frame of primary, secondary, tertiary, and trunk roads supports claims about major roads. A frame that adds residential streets supports claims about the network people live on, most of which is residential: in the frames used here, residential streets are 60 to 85\% of segments.
 
-The frame defines what the estimate is about. A frame restricted to arterial roads answers a question about arterial roads; a frame that includes residential streets answers a question about the eligible road network as a whole. A stratified design across road types answers both, provided that design weights are used in estimation.
+The simplest draw takes $n$ segments from $\Npop$ with equal probability, so each has inclusion probability $\pi_i = n/\Npop$. A stratified draw takes $n_h$ of the $N_h$ segments in each road class $h$, so $\pi_i = n_h/N_h$.
 
-\subsection{Selection mechanisms}
+\subsection{Point samples}
 
-Two selection mechanisms are useful. The first is point-based sampling: draw $n$ segments without replacement from the frame, with inclusion probabilities $\pi_i$. Equal-probability simple random sampling sets $\pi_i = n/\Npop$. Stratified sampling sets $\pi_{ih} = n_h/N_h$ within stratum $h$, where $N_h$ is the number of segments in stratum $h$ and $n_h$ is the number sampled.
+In a point sample the unit observed is the unit drawn. The clearest case is platform imagery. Google Street View's metadata service says whether a panorama exists near a coordinate and when it was taken, and its image service returns the picture \citep{googleStreetViewMetadata,googleStreetViewStatic}. Query it at the start of each sampled segment, and each image inherits its segment's $\pi_i$.
 
-The second mechanism is walk-based sampling: draw a sample of starting points and a length, generate independent random walks on the road network, and take measurements along each walk at a fixed cadence. The independent walks become the primary sampling units, and within-walk observations are systematic sub-samples. The walk design is useful when the substantive object is the experience of moving through the city rather than a static cross-section of segments, and it is the natural design for mobile sensors that record continuously along a route.
+What can go wrong is coverage. Some sampled segments have no panorama, and not every available image gets coded. If the missing segments differ from the rest, estimates describe covered streets only. The share of sampled segments with an image is itself an estimate of the platform's coverage of the frame, and it should be reported.
 
-\subsection{Allocation as an operational layer}
+\subsection{Route samples}
 
-Probability sampling chooses the locations; field logistics determine how those locations are visited. Sampled points are clustered into trip groups, ordered through a routing engine, and assigned to fieldworkers; for the walk design, walks are generated and assigned. Clustering and routing are operational steps that follow sampling. They affect the variance of the estimator, because adjacent points on the same itinerary may share neighborhoods, time windows, fieldworkers, and acquisition conditions, but they do not change the inclusion probabilities. Inference therefore proceeds from the original $\pi_i$, with itinerary structure used to construct cluster-robust standard errors and walk structure used to construct walk-based standard errors.
+Sending a person to each sampled point is expensive, so sampled points are grouped into itineraries and a rider travels each itinerary. In our fieldwork the rider wore a camera that recorded continuously, and frames were later saved from the video at fixed intervals: every 10 seconds in Mumbai and Navi Mumbai and every 120 seconds in Bangalore and Delhi. No frame is tied to a sampled point. The median frame is \nearestMumbai{} meters from the nearest sampled point in Mumbai, \nearestDelhi{} in Delhi, and \nearestBangalore{} in Bangalore. Sound-meter readings were taken at stops along the route, a median \noisenearest{} meters from the nearest sampled point, and \noisewithinhundred\% of them within 100 meters of one.
 
-\section{Estimation and Inference}
+The sampled points therefore fix the route, and the observations are a sample of the route. Two things separate them from the frame.
 
-\subsection{Horvitz-Thompson totals}
-
-Let $S_i \in \{0, 1\}$ denote whether population unit $i$ is included in the sample. The Horvitz-Thompson estimators for population totals are
+\emph{Time.} A frame every $t$ seconds lands on a given stretch of road with probability proportional to the time the rider spends there, which is the stretch's length divided by the rider's speed. A stretch ridden at 5~km/h is photographed five times as often as one ridden at 25~km/h. Speed is lowest where streets are narrow or crowded, so the frames over-represent those places relative to distance. In Delhi the median speed at a frame is \kmhresidentialDelhi{}~km/h on residential roads and \kmhmajorDelhi{}~km/h on secondary and larger roads, and in \stoppedDelhi\% of frames the rider is stationary. Weighting each frame by the rider's speed at that moment, $v_i$, turns a sample that is uniform in time into one that is uniform in distance:
 \begin{equation}
-    \That_Y = \sum_{i \in \sample} \frac{Y_i}{\pi_i}, \qquad
-    \That_Z = \sum_{i \in \sample} \frac{Z_i}{\pi_i}.
+    \Rhat_{\text{route}} = \frac{\sum_{i \in \sample} v_i Y_i}{\sum_{i \in \sample} v_i Z_i}.
+    \label{eq:speed}
 \end{equation}
-Under the sampling design, $\That_Y$ and $\That_Z$ are unbiased for $T_Y = \sum_i Y_i$ and $T_Z = \sum_i Z_i$ \citep{horvitz1952generalization,lohr2019sampling}.
+Speed comes from the camera's GPS track. A stationary frame would get no weight, so we floor speed at 0.5 meters per second.
 
-\subsection{Ratio estimator}
+\emph{Roads.} The quickest way between two points on residential streets usually runs along a larger road. Figure~\ref{fig:roadmix} compares the road classes of the sampled points with those of the frames. In Delhi, \sampleresidentialDelhi\% of sampled points and \frameresidentialDelhi\% of frames are on residential roads; \samplemajorDelhi\% of points and \framemajorDelhi\% of frames are on secondary or larger roads. Weighting by speed makes this worse, not better, because it shifts weight toward fast roads. The repair is post-stratification: rescale the weights so that each road class has the share it has in the frame. The drawn sample gives those shares. This removes the imbalance across road classes. It cannot remove differences within a class between the streets a route uses and the streets it does not, a limit we return to.
 
-The ratio estimator for $R$ is
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{roadmix}
+\caption{Road classes of the sampled points and of the video frames recorded while riding between them. Each panel is a city. Blue points give the share of the 1,000 sampled points in each OpenStreetMap road class; black points give the share of annotated video frames, classed by the nearest mapped road. ``Other'' includes service roads, footways, unclassified roads, and frames with no mapped road nearby.}
+\label{fig:roadmix}
+\end{figure}
+
+Which of the three quantities is wanted depends on the question. Per minute of riding is the rider's experience. Per meter of route describes the roads ridden. Reweighted to the frame is the closest a route sample comes to the road network.
+
+\subsection{Allocation}
+
+Grouping sampled points into itineraries does not change which points were drawn. It does make observations depend on one another: frames from one day share weather, a time of day, a part of the city, and a rider. Standard errors must treat the day or the itinerary, not the frame, as the independent unit.
+
+Our allocator can also generate random walks on the road graph in place of routes between sampled points. A simple random walk on an undirected graph crosses every edge equally often in the long run, so measurements taken at a fixed distance along it would weight roads by length without any reweighting. That property is a limit: it holds for long walks and fails on one-way streets. None of the applications here used walks, and we do not evaluate them.
+
+\section{Estimation}
+
+\subsection{Weighted totals, ratios, and means}
+
+Let $w_i$ be the weight of sampled unit $i$. For a point sample, $w_i = 1/\pi_i$. The Horvitz--Thompson estimator of a total,
 \begin{equation}
-    \Rhat = \frac{\That_Y}{\That_Z}.
+    \That_Y = \sum_{i \in \sample} w_i Y_i,
 \end{equation}
+is unbiased for $T_Y = \sum_{i \in \universe} Y_i$ over repeated draws \citep{horvitz1952generalization}. The ratio and the mean are estimated by
+\begin{equation}
+    \Rhat = \frac{\sum_{i \in \sample} w_i Y_i}{\sum_{i \in \sample} w_i Z_i},
+    \qquad
+    \Yba = \frac{\sum_{i \in \sample} w_i Y_i}{\sum_{i \in \sample} w_i}.
+\end{equation}
+The threshold share is the mean of $\ind\{Y_i \geq \tau\}$. With equal-probability sampling the weights cancel and these are the sample ratio and the sample mean.
 
-\begin{proposition}[Design consistency and finite-sample bias]
-\label{prop:consistency}
-If the sampling design has known positive inclusion probabilities, the measurement process returns fixed values $(Y_i, Z_i)$ for sampled units, and standard regularity conditions for ratio estimation hold, then $\Rhat$ is design-consistent for $R$ and its bias is of order $O(n^{-1})$. Under simple random sampling without replacement, the leading variance is consistently estimated by a Taylor linearization using residuals $e_i = Y_i - \Rhat Z_i$.
+\begin{proposition}[Ratio estimator]
+\label{prop:ratio}
+If every unit has a known positive inclusion probability and measurement returns fixed values $(Y_i, Z_i)$, then $\Rhat$ is consistent for $R$ with bias of order $n^{-1}$, and its variance is estimated to first order by the variance of the weighted total of $e_i = (Y_i - \Rhat Z_i)/\That_Z$.
 \end{proposition}
 
-The total estimators are unbiased; the ratio estimator is consistent with $O(n^{-1})$ finite-sample bias because it divides two random totals \citep{cochran1977sampling}. The bias term is small in samples typical of street-level studies and can be estimated directly from the data.
+The bias arises because $\Rhat$ divides one random total by another \citep{cochran1977sampling}.
 
-\subsection{Mean estimator}
+\subsection{Variance}
 
-When the estimand is a population mean rather than a ratio, the same machinery applies with $Z_i \equiv 1$. Under simple random sampling, the design-based estimator is the sample mean $\Yba = n^{-1} \sum_{i \in \sample} Y_i$, which is design-unbiased for $\mu$, and the variance estimator is
+Write $c_i = w_i e_i$ for a ratio and $c_i = w_i (Y_i - \Yba) / \sum_j w_j$ for a mean. Sum $c_i$ within each independent unit $g$ (a segment in a point sample, a day or an itinerary in a route sample) to get $C_g$. With $G_h$ independent units in stratum $h$,
 \begin{equation}
-    \widehat{\V}(\Yba) \;=\; \left(1 - \frac{n}{\Npop}\right) \frac{1}{n} \cdot \frac{1}{n-1} \sum_{i \in \sample} (Y_i - \Yba)^2,
+    \widehat{\V} = \sum_h \frac{G_h}{G_h - 1} \sum_{g \in h} \left(C_g - \bar{C}_h\right)^2 .
+    \label{eq:variance}
 \end{equation}
-with the finite population correction dropped when the sampling fraction is small. For the threshold-exceedance estimand, $Y_i$ is replaced by $\ind\{Y_i \geq \tau\}$ and the estimator reduces to the sample proportion above the threshold, with the corresponding Bernoulli variance.
+With one stratum and each row its own unit, this is the usual variance of a ratio or a mean under simple random sampling; with days or itineraries as units, it is the cluster-robust variance \citep{cameron2015cluster}. It treats units as drawn with replacement and so omits the finite population correction. That overstates the variance by the sampling fraction. The fraction is about 1\% or less in the Street View samples of Indian cities. It may be as large as a sixth in the major-road samples (Bangkok's 1,000 sampled segments carry identifiers up to 6,267), so those standard errors are somewhat conservative. We omit the correction throughout because the size of the frame was not saved with most of the samples; the sampler now saves it.
 
-\subsection{Variance under simple random sampling for the ratio}
+After post-stratification, $c_i$ is replaced by its departure from the weighted mean of $c$ in its road class. Fixing the class shares removes the variation between classes, and only variation within classes remains.
 
-For equal-probability simple random sampling of $n$ units from $\Npop$, $\pi_i = n/\Npop$, the weights cancel in the ratio, and
-\begin{equation}
-    \Rhat = \frac{\sum_{i \in \sample} Y_i}{\sum_{i \in \sample} Z_i}.
-\end{equation}
-Let $\bar{Z} = n^{-1} \sum_{i \in \sample} Z_i$ and $e_i = Y_i - \Rhat Z_i$. The linearized variance estimator is
-\begin{equation}
-    \widehat{\V}(\Rhat) \;=\; \left(1 - \frac{n}{\Npop}\right) \frac{1}{n \bar{Z}^2} \cdot \frac{1}{n-1} \sum_{i \in \sample} (e_i - \bar{e})^2,
-\end{equation}
-\citep{cochran1977sampling,lohr2019sampling}.
+Intervals use a $t$ distribution with degrees of freedom equal to the number of independent units minus the number of strata. The video samples have 9 to 14 days each, and intervals based on so few clusters tend to be too narrow \citep{cameron2015cluster}.
 
-\subsection{Stratification}
+All of this is implemented in the \texttt{geoestimate} package. Its weighted, stratified, clustered, and post-stratified estimates and standard errors agree with those of R's \texttt{survey} package to eight digits on test data.
 
-When the eligible road network is partitioned into strata $h = 1, \ldots, H$ with $N_h$ segments and $n_h$ sampled, the design weight for sampled unit $i$ in stratum $h$ is $a_i = N_h / n_h$. The weighted ratio estimator is
-\begin{equation}
-    \Rhat_{st} = \frac{\sum_{i \in \sample} a_i Y_i}{\sum_{i \in \sample} a_i Z_i},
-\end{equation}
-and the corresponding stratified mean is $\Yba_{st} = (\sum a_i)^{-1} \sum a_i Y_i$. Stratification matters when road types differ in the outcome. The women's-presence application finds that the female share is lower on primary and secondary roads and higher in residential areas; the noise application finds that decibel levels vary with road class and traffic density. In both, an unweighted estimator from a road-type-imbalanced sample would be biased.
+\subsection{Coverage}
 
-\subsection{Cluster-robust variance under itinerary allocation}
+A sample is complete only when every drawn unit is either observed or recorded as missing. If units are missing at different rates in different road classes, post-stratifying the observed units to the drawn sample's class shares corrects for it, on the assumption that within a class the missing units resemble the observed ones. If that assumption fails, the estimate describes covered streets.
 
-Allocator-created itineraries can introduce dependence among observations even when sampling is independent. Adjacent sampled points share neighborhoods, time windows, fieldworkers, weather, and acquisition conditions. A cluster-robust linearization aggregates residuals within each itinerary $g$:
-\begin{equation}
-    E_g = \sum_{i \in g \cap \sample} a_i (Y_i - \Rhat Z_i), \qquad
-    \widehat{\V}_{cl}(\Rhat) = \frac{G}{G-1} \cdot \frac{\sum_{g=1}^{G}(E_g - \bar{E})^2}{\Big(\sum_{i \in \sample} a_i Z_i\Big)^2},
-\end{equation}
-where $G$ is the number of itineraries \citep{cameron2015cluster}. The corresponding cluster-robust variance for the mean replaces the residual with $a_i Y_i$ in the numerator and $\sum a_i$ in the denominator. The ratio of cluster-robust to naive standard errors is itself a useful diagnostic: a ratio near one indicates that operational clustering did not induce dependence in the outcome, while a large ratio indicates that itinerary structure carries substantial information.
+\section{A Check Against a Known Truth}
 
-\subsection{Walk-based variance}
+We built an artificial city of 20,000 segments in three road classes. Classes differ in women's share of pedestrians, in crowding, and in speed, and within a class more crowded segments are slower. The true share of women among pedestrians is \simtruth\%. We drew two kinds of sample a thousand times each. The point sample observes 600 segments drawn at random. The route sample rides 150 segments on each of 12 days, half of them on major roads though major roads are 8\% of the city, and saves a frame every 60 seconds; each day also shifts the share of women a little, so frames from one day are correlated.
 
-When the design generates independent random walks, the walk is the primary sampling unit and inference is between walks. Let $Y_g = \sum_{i \in g} Y_i$ and $Z_g = \sum_{i \in g} Z_i$ aggregate counts within walk $g$. The ratio is $\Rhat = \sum_g Y_g / \sum_g Z_g$, and inference uses the variation across the $G$ independent walks. For a mean, $\Yba = \sum_g Y_g / \sum_g n_g$ where $n_g$ is the number of observations on walk $g$, and the variance is the corresponding between-walk variance. Under the walk design, the walk-based standard error is the design-preferred standard error, not a robustness check.
+\begin{table}[H]
+\centering
+\caption{Estimates of women's share of pedestrians in a simulated city where the true share is \simtruth\%. Each row summarizes 1,000 samples. ``Per minute'' weights frames equally; ``per metre'' weights each frame by speed; ``road network'' also post-stratifies road classes to their shares in the city. Mean and SD are the mean and standard deviation of the estimates across samples, bias is the mean minus the truth, SE is the mean estimated standard error, and coverage is the share of nominal 95\% intervals that contain the truth.}
+\label{tab:simulation}
+\adjustbox{max width=\linewidth}{\input{../tabs/simulation.tex}}
+\end{table}
 
-\subsection{Coverage and nonresponse}
+Table~\ref{tab:simulation} gives the results. The point sample is unbiased and its intervals cover the truth \simcoveragepointsample\% of the time. The route sample taken at face value is \simbiasrouteperminute{} points too low and its intervals cover \simcoveragerouteperminute\% of the time. Weighting by speed alone is worse, \simbiasroutepermetre{} points too low, because it moves weight from slow residential streets to fast major roads, which the route already over-represents. Speed weights and post-stratification together remove the bias, and the intervals cover \simcoveragerouteroadnetwork\% of the time.
 
-A spatial sample is not complete until each sampled unit is either observed or coded as nonresponse. Let $C_i \in \{0, 1\}$ indicate whether usable data are available for unit $i$. For Google Street View, $C_i$ depends on whether platform vehicles have covered the area, whether the imagery is user-contributed, and whether the panorama is too old, blurred, or otherwise unusable. For field-collected imagery and sensor data, $C_i$ depends on worker compliance, road access, equipment failure, weather, and safety constraints.
-
-If $C_i$ is independent of $(Y_i, Z_i)$ conditional on design strata $X_i$, complete-case weighted estimation is design-unbiased, and the inverse coverage probability multiplies the existing weight: $a_i^* = a_i / \widehat{\Pr}(C_i = 1 \mid X_i)$. If $C_i$ is associated with $(Y_i, Z_i)$ even after conditioning, the estimand changes from a population quantity to a quantity conditional on coverage, and the gap between coverage-adjusted and unadjusted estimates is itself part of the result.
-
-\section{Acquisition Modes}
-
-The framework supports three acquisition modes. The choice among them is governed by what the estimand requires from the time dimension, from the spatial coverage of available data, and from the physical quantity being measured.
-
-\subsection{Researcher-collected imagery}
-
-A field team carrying GoPro or equivalent cameras visits assigned itineraries, records video tagged with GPS and EXIF metadata, and uploads frames for annotation. A frame-to-GPS index assigns each annotated frame to a sampled coordinate, and the resulting counts feed the estimator. The mode preserves randomization over time of day, day of week, and weather, because the field team visits on the assigned schedule. The cost is operational: field collection is more expensive per unit than a platform query, and itinerary compliance has to be verified against GPS tracks rather than assumed.
-
-The annotation produces counts of visible people by coarse categories. The categories are constructed from visible cues, not from observed identity. The protocol records ``unknown'' and ``ambiguous'' as explicit categories, and inference reports both a complete-case female share among classified persons and bounds in which unknowns are alternately classified as all women or all men. The bounds are tight when classification rates are high and informative when they are not.
-
-\subsection{Researcher-deployed sensors}
-
-A field team carries a calibrated sensor, follows assigned itineraries, and records measurements at a fixed cadence along the route and at substantively important conditions (such as traffic stops for noise measurement). Each observation stores GPS, timestamp, and the relevant physical reading. The sensor mode applies to any quantity that can be measured in situ at a sampled point: noise, particulate matter, temperature, illuminance, or other environmental signals.
-
-The mode preserves the same randomization properties as researcher-collected imagery. Itinerary compliance is verified against GPS; observation timing is verified against the route schedule. The substantive estimand is typically a population mean or a threshold-exceedance share rather than a per-unit ratio, but the sampling and inference machinery is the same.
-
-\subsection{Platform imagery}
-
-Google Street View provides a metadata endpoint that returns panorama availability, location, panorama ID, image date, and copyright information \citep{googleStreetViewMetadata}. A Static API returns non-interactive panoramas at requested headings and requires an API key and billing \citep{googleStreetViewStatic}. The sampler queries metadata at sampled coordinates, downloads images where coverage exists, and feeds them to annotation. Platform imagery is scalable, low marginal cost, and well-suited to outcomes that change slowly.
-
-Three measurement-relevant constraints distinguish platform imagery from researcher-collected modes:
-
-\begin{enumerate}
-\item \emph{Obfuscation.} Google applies automatic privacy protections that blur identifiable faces and license plates \citep{googleBlurPolicy,frome2009privacy}. Blurring is ethically valuable, but for any annotation that relies on facial cues (gender, age, expression), it raises the share of ambiguous cases and depresses the classified denominator. The measurement implication is that platform imagery is better suited to outcomes that do not require facial inference (presence vs absence of persons, infrastructure features, vehicles, vendors) than to outcomes that do.
-\item \emph{Time of collection.} Capture time is set by the platform, not the researcher. Imagery is collected during the hours when platform vehicles operate and during the seasons in which they cover a given region. The resulting frame is biased toward daylight on dry weekdays and away from evenings, weekends, and weather conditions that are themselves substantively interesting. For outcomes that vary sharply by hour, day of week, or weather (public presence, market activity, traffic congestion), platform imagery does not estimate the time-randomized quantity that the researcher would obtain by visiting at randomized times.
-\item \emph{Recency.} Image dates can be years out of date, and the granularity of the date metadata can vary or be missing \citep{curtis2013streetviewdates}. A panorama captured three years before the question of interest documents a different state of the city. For built-environment features that change slowly (footpaths, lane markings), this is often acceptable; for features that change quickly (signage, vendor activity, infrastructure investments), it is not.
-\end{enumerate}
-
-The three constraints do not disqualify platform imagery. They locate it. The mode is most appropriate for slowly-changing infrastructure outcomes, for spatially expansive audits where the marginal cost of researcher collection is prohibitive, and for studies in which the platform's observed time and date metadata are part of the analysis rather than ignored. For outcomes about current street-times and human presence, the framework treats platform imagery as a complement to researcher-collected modes rather than a substitute.
+The simulation gives post-stratification its best case: road class is the only way the route differs from the city. Real routes may also favor particular streets within a class.
 
 \section{Applications}
 
-\subsection{Women's presence in public space}
+\subsection{Road condition from Street View}
 
-The first application targets $R$, the people-weighted female share, in three Indian cities. Field collection in Mumbai and Navi Mumbai using the GoPro mode estimates women at roughly 18 to 19 percent of visible pedestrians, well below census sex-ratio benchmarks. Google Street View sampling across Mumbai, Delhi, and Navi Mumbai estimates women at roughly 21 to 24 percent of visible pedestrians, with the female share lower on primary and secondary roads and higher in residential areas. The two modes give similar overall magnitudes in the overlapping cities. The remaining gap is consistent with the platform-imagery time bias (Street View is captured during daytime hours when Google vehicles operate) and with the road-type composition of the underlying samples.
+This is the point sample in its plainest form. In late 2017 we drew 1,000 segments each of primary, secondary, tertiary, and trunk road in Bangkok, Dhaka, Jakarta, and Lagos, and 5,000 in Wayne County, Michigan, and requested Street View images at the start of each. Workers on Amazon Mechanical Turk coded each image for potholes, cracks, litter, a paved sidewalk, and clear road markings.
 
-The estimates are reported with design-based confidence intervals around $R$, $L$, and $G$, with cluster-robust standard errors when itinerary allocation was used and walk-based standard errors when independent walks were the sampling unit. The two estimands differ for these data: $R$ is meaningfully lower than $L$, indicating that high-traffic locations are especially male dominated. The gap $G = R - B$ is large and negative against any plausible benchmark.
+\begin{table}[H]
+\centering
+\caption{Condition of major roads from Street View images at sampled road segments. Entries are percentages of segments. The frame is primary, secondary, tertiary, and trunk roads cut into 500-meter segments; ``Covered'' is the share of sampled segments for which Street View returned an image. Estimates are post-stratified to the drawn sample's mix of road classes.}
+\label{tab:condition}
+\adjustbox{max width=\linewidth}{\input{../tabs/condition.tex}}
+\end{table}
 
-\subsection{Street-level noise exposure in Delhi}
+Coverage was \dhakacovered\% in Dhaka, which we therefore dropped, \lagoscovered\% in Lagos, and at least 97\% elsewhere (Table~\ref{tab:condition}). \conditionjakartapothole\% of segments in Jakarta show potholes, against \conditionbangkokpothole\% to \conditionwaynepothole\% in the other three places; standard errors across the table run from 0.4 to 1.6 percentage points. Adjusting for the road classes of the uncovered segments changes no estimate by more than \conditionmaxadjustment{} points. The estimates are about the streets as they were when photographed, which ranged over several years.
 
-The second application targets $\mu$ and $P_\tau$ for noise exposure on Delhi streets, using the sensor acquisition mode. A spatial sample of street segments is drawn from the road network, allocated into itineraries, and visited by a field team carrying a calibrated sound meter. Measurements are taken at every 5 km along the route and at every traffic stop. Each observation stores GPS, timestamp, and the minimum and maximum decibel readings within a fixed measurement window.
+\subsection{Women's presence from Street View}
 
-Across 55 logs collected over four fieldwork days and 12 itineraries, the median minimum reading is 65.9 dB and the median maximum 95.4 dB; the highest peak is 119.2 dB. The threshold-exceedance estimand $P_{55}$ for minimum readings is 87.3 percent: in most measurement windows, the lower envelope of street-level sound exceeds the daytime residential ambient standard under India's Noise Pollution Rules \citep{indiaNoiseRules2000}. The threshold-exceedance estimand $P_{100}$ for maximum readings is 30.9 percent. Traffic stops register about 8 dB higher at the floor of the measurement window and 5 dB higher at the peak than other sampled stops; treated as an opportunistic oversample of a high-exposure condition, they are reported separately rather than pooled into the citywide mean. The walk-based standard error around $\mu$ is the design-preferred standard error because the route is the primary sampling unit and within-route observations are systematic sub-samples.
+The second point sample uses a frame that adds residential and unclassified roads. In each of Mumbai, Navi Mumbai, and Delhi, 1,500 sampled locations were checked for Street View coverage; \streetviewcoveredMumbai\%, \streetviewcoveredNaviMumbai\%, and \streetviewcoveredDelhi\% had a panorama. Coders counted women and men on foot in images from \streetviewcodedMumbai, \streetviewcodedNaviMumbai, and \streetviewcodedDelhi{} locations. How those locations were chosen from the covered ones was not recorded, so the estimates rest on the assumption that the choice was unrelated to who was on the street.
 
-The estimand structure differs from the imagery application. For noise, the relevant quantities are a population mean and a threshold-exceedance share rather than a per-unit ratio. The sampling and inference machinery is the same: probability sample on the road network, allocator-routed itineraries, design-based variance.
+Women are \streetviewMumbai\% of pedestrians in Mumbai, \streetviewNaviMumbai\% in Navi Mumbai, and \streetviewDelhi\% in Delhi (Table~\ref{tab:women}, last column). Adjusting for road class moves each by less than half a point.
 
-\subsection{Public goods and infrastructure}
+Platform imagery has properties that matter for an outcome like this one. Google blurs faces and license plates \citep{googleBlurPolicy,frome2009privacy}, which protects the people photographed and makes some of them harder to classify. The platform, not the researcher, chooses when to photograph, and its vehicles work in daylight. And images can be years old, with dates that vary within a city \citep{curtis2013streetviewdates}. Street View is better suited to things that change slowly, such as sidewalks, than to who is on the street at a given hour.
 
-The Street View pipeline annotates infrastructure features (footpaths, lane markings, potholes, litter, land use) on the same frames that produce the gender counts, and the sound meter pipeline records noise alongside contextual covariates such as road class, distance from the carriageway, and construction activity. Both support a regression of the form
-\begin{equation}
-    Y_i \;=\; \alpha + \beta_1 \text{Footpath}_i + \beta_2 \text{Litter}_i + \beta_3 \text{RoadType}_i + \gamma_c + \epsilon_i,
-\end{equation}
-where $Y_i$ is the per-unit female share or the per-unit decibel level, and $\gamma_c$ absorbs city or neighborhood fixed effects. The regression describes conditional associations between observable infrastructure and the local outcome. It is not causal in this design: infrastructure placement is not as-if random, and unobserved neighborhood characteristics may drive both the infrastructure and the outcome. The estimated coefficients identify which public-good deficits co-occur with low female presence and with high noise, a task that is informative for descriptive political analysis even when causal identification requires a separate research design.
+\subsection{Women's presence from video}
 
-\subsection{Targeting and program evaluation}
+A rider with a chest-mounted camera rode itineraries through 1,000 sampled points in each of Mumbai, Navi Mumbai, Bangalore, and Delhi over \daysMumbai, \daysNaviMumbai, \daysBangalore, and \daysDelhi{} days. Coders counted women and men on foot in \framestotal{} frames. This is a route sample, and Table~\ref{tab:women} and Figure~\ref{fig:women} report it three ways.
 
-Design-based estimates produce defensible citywide quantities. A model trained on the sampled annotations or readings produces predicted-outcome maps for unsampled locations, which can guide operational targeting: where to send safety auditors, where to survey women about perceived safety, where to pilot lighting and sidewalk investments, where to deploy noise barriers or traffic-calming measures. The two outputs play different roles. The design-based estimate is the citywide claim. The model-based map is a prioritization tool whose predictions are conditional on the training sample and the predictor set.
+\begin{table}[H]
+\centering
+\caption{Women's share of pedestrians (\%), with 95\% confidence intervals. The first three columns use video frames. ``Per minute of riding'' weights frames equally; ``per metre of route'' weights each frame by the rider's speed; ``road network'' also post-stratifies road classes to the drawn sample. Their intervals treat fieldwork days as clusters. ``Street View'' uses images at sampled locations, post-stratified to the drawn sample's road classes, with locations as independent units. Street View was not collected in Bangalore.}
+\label{tab:women}
+\adjustbox{max width=\linewidth}{\input{../tabs/women.tex}}
+\end{table}
 
-The framework supports panel and difference-in-differences designs by repeating the sampling protocol over time. Sample the same segments before and after a policy change, or sample treatment and comparison areas with repeated time windows; the outcome is the change in $R$ or $\mu$. With randomized or plausibly exogenous rollout, the resulting estimator is causal under the standard parallel-trends or unconfoundedness assumptions. Without exogenous rollout, the same data support transparent event-study designs, provided that imagery dates, sensor calibration, and collection windows are explicitly controlled.
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{women}
+\caption{Women's share of pedestrians under each weighting of the video frames, and from Street View. Points are estimates and lines 95\% confidence intervals, computed as in Table~\ref{tab:women}. The estimate reweighted to the road network is in blue.}
+\label{fig:women}
+\end{figure}
+
+Counted per minute of riding, women are \videoMumbaiperminuteofriding\% of pedestrians in Mumbai, \videoNaviMumbaiperminuteofriding\% in Navi Mumbai, \videoDelhiperminuteofriding\% in Delhi, and \videoBangaloreperminuteofriding\% in Bangalore. Weighting by speed lowers the Delhi and Bangalore estimates by one to two points, as the simulation predicts when faster roads have fewer women. Reweighting to the road network raises them again: to \videoDelhiroadnetwork\% in Delhi and \videoBangaloreroadnetwork\% in Bangalore. In Delhi the reweighted estimate is \videoDelhiroadnetwork\% against \videoDelhiperminuteofriding\% at face value. The adjustment matters most there because the Delhi route departs most from the sample (Figure~\ref{fig:roadmix}) and because residential streets, where the share of women is highest, are the ones the route under-represents. In Mumbai, where the sample itself put more points on major roads, the three estimates differ by a point.
+
+The adjustments also change how much the data can say. The reweighted intervals are nearly twice as wide as the unadjusted ones in Delhi and Bangalore, because a few hundred residential frames now carry most of the weight. The clustered standard errors are between \videoseratiomin{} and \videoseratiomax{} times the ones that treat frames as independent.
+
+Whatever the weighting, women are a fifth to a quarter of the pedestrians on these streets, and the video and Street View estimates agree to within their intervals in Mumbai and Delhi. They are furthest apart in Navi Mumbai, where Street View gives \streetviewNaviMumbai\% and video at most \videoNaviMumbairoadnetwork\%, though the reweighted video interval is wide enough to overlap Street View's. The two sources differ in year, hour, and the roads they cover, and we cannot say which difference is responsible. The location mean $L$ is within a point of $R$ in every city, so crowded places are not notably more male than quiet ones.
+
+\subsection{Noise in Delhi}
+
+Between 28 April and 16 May 2026 a rider carried a sound meter along \noiseitineraries{} of the \delhiitineraries{} Delhi itineraries, on \noisedays{} days. At stops along each itinerary the rider recorded the lowest and highest level the meter showed during the reading: \noiseplanned{} readings at planned stops and \noisetraffic{} more while halted in traffic. We do not know how the \noiseitineraries{} itineraries ridden were chosen from the \delhiitineraries; they are spread across the city much as the rest are.
+
+The readings are a route sample. Half of the planned-stop readings (\noiseresidential\%) are on residential roads, against \delhisampleresidential\% of sampled points. Table~\ref{tab:noise} reports the readings as taken and reweighted to the sample's road classes, with itineraries as clusters.
+
+\begin{table}[H]
+\centering
+\caption{Street noise in Delhi from sound-meter readings, with 95\% confidence intervals. Each reading gives the minimum and maximum level during the reading. ``As read'' weights planned-stop readings equally; ``road network'' post-stratifies them to the road classes of the drawn sample. Traffic stops are readings taken while halted in traffic and are not part of the other columns. Intervals treat itineraries as clusters. Every traffic-stop reading had a minimum above 55~dB, so that cell has no interval.}
+\label{tab:noise}
+\adjustbox{max width=\linewidth}{\input{../tabs/noise.tex}}
+\end{table}
+
+Reweighted to the road network, the mean minimum is \noiseroadnetworkmin~dB and the mean maximum \noiseroadnetworkmax~dB. In \noiseroadnetworkminatleastFiveFive\% of readings even the quietest moment is at or above 55~dB, the daytime standard for residential areas. The reweighting matters most for the loudest moments: \noiseasreadmaxatleastOneZeroZero\% of readings as taken peak at or above 100~dB, but \noiseroadnetworkmaxatleastOneZeroZero\% once residential streets get their due weight. Readings in traffic are louder, with a mean maximum of \noiseattrafficstopsasreadmax~dB and a third peaking at or above 100~dB. They describe a condition, being stopped in traffic, and not a sample of streets, so we keep them apart.
+
+A spot reading of a few seconds is not the day-long average that the standard is written for, and we did not calibrate the meter against a reference instrument. The comparison with 55~dB locates the readings; it is not a finding of legal exceedance.
+
+\subsection{Air quality in Delhi}
+
+On \airitineraries{} of the itineraries the rider also read a hand-held air monitor, \airreadings{} times in all. Mean PM2.5 was \airpm~$\mu$g/m$^3$ (95\% interval \airpmlow{} to \airpmhigh, itineraries as clusters). We report it as read. With \airreadings{} readings, the adjustments above would rest on a handful of readings per road class, and the interval is already wide. This application shows the limit of a small route sample more than it establishes a level.
+
+\section{Ethics}
+
+The imagery here shows people in public who did not agree to be recorded, and several features of the work are meant to limit what that costs them.
+
+\emph{What is recorded about people.} Coders count people and record apparent gender from clothing, hair, and build. No face recognition is used, no individual is identified or tracked across frames, and the analysis data contain counts only. Apparent gender is a coder's judgment about appearance. It imposes two categories on people who may not fit them.
+
+\emph{What is kept and released.} Video and full-resolution frames can identify people and are not released. Coders saw reduced-resolution frames. The public data are counts with a location and a time. Street View images are blurred by Google before we receive them, and we release no images from either source.
+
+\emph{Location and the field team.} The rider's routes are in the data as the positions of frames and readings. We checked that each day's first and last positions are scattered across the city and do not mark a home. The rider's route plan, which does contain a home address, is not released. Riding a motorbike in city traffic for weeks carries real risk to the rider, which a study of this kind should weigh against what it learns.
+
+\emph{What the method could be used for.} A procedure that samples streets and counts who is on them could be turned to watching particular places or groups. Probability sampling pulls the other way: it spreads observation thinly across a city and makes no place the target. We would not extend the method to identify individuals, to follow people, or to map the presence of a group in order to act against it.
+
+\emph{Platform terms.} Street View images are used under Google's terms, which restrict storing and redistributing images; we store counts and metadata.
+
+\emph{Review.} The video study was reviewed by the University of Southern California Institutional Review Board and deemed exempt (UP-25-00545).
+% TODO(authors): confirm whether UP-25-00545 also covers the sound-meter, air-monitor, and Street View collection, and state it here.
+
+\section{Beyond Streets}
+
+Nothing above depends on the unit being a street. The frame can be any list of places that can be enumerated and reached: grid cells, parcels, transit stops, polling stations, water points. The two designs carry over. If the instrument observes the drawn place, the draw's probabilities apply. If the instrument observes the way to the place, the observations sample the way, and what must be asked is what governs how often each kind of place is seen (time, distance, access) and whether a recorded quantity, as speed was here, can undo it.
+
+Roads are a convenient case because one object serves three purposes: the road network is the frame, the means of travel, and, for many outcomes, the thing measured. That convenience is also why route samples of roads go wrong in a patterned way. Travel concentrates on the roads built for travel.
+
+\section{Limitations}
+
+Road class is a coarse account of how routes differ from the network. Within residential streets, a route uses those that connect, and connecting streets may be busier than dead ends. The simulation does not test this, and our data cannot.
+
+The road-class shares used for reweighting come from the drawn sample of 1,000 points and have their own sampling error, which the intervals ignore. In Delhi only \samplemajorDelhi\% of sampled points are on secondary or larger roads, so that share is itself imprecise.
+
+Fieldwork covered daytime on some days of some months. Every estimate is about those hours. Who is on the street at night, and how loud the street is then, are not measured.
+
+The number of independent units is small for the video (9 to 14 days per city), and intervals with so few clusters are too narrow by an amount we have not estimated.
+
+Several things were not recorded when the data were collected and limit what can be claimed: the size of the frame, how coded Street View locations were chosen, and how the itineraries ridden with the sound meter were chosen. The sampler now saves each segment's inclusion probability, stratum, and length with the sample.
 
 \section{Conclusion}
 
-We develop a probability-sampling framework for street-level field measurement. The frame is constructed from the road network. Sampling is randomized over street segments or independent random walks. Allocation is operational, not inferential. Estimation produces design-based estimates of population ratios, means, and threshold-exceedance shares, with variance estimators for simple random, stratified, clustered, and walk-based designs. Coverage and nonresponse are part of the design.
+A random draw from the road network gives street-level measurement a population to describe. Whether the measurements describe it depends on a second thing, which is easy to overlook: whether the instrument observed the units that were drawn. When it did, as with images requested at sampled segments, the usual survey estimators apply and the work is in reporting coverage. When the instrument rode between the units, the data describe the ride. In our Delhi fieldwork the ride spent \framemajorDelhi\% of its frames on large roads that make up \samplemajorDelhi\% of the sample.
 
-Three acquisition modes specialize the framework: researcher-collected imagery, researcher-deployed sensors, and platform imagery. The first two preserve randomization over time at the cost of operational complexity. The third is scalable but constrained by face and plate obfuscation, by collection at platform-determined times rather than researcher-randomized times, and by image dates that can lag the question by years. Treating platform imagery as a measurement instrument with these specific properties, rather than as a substitute for researcher-collected data, makes the resulting biases auditable.
+Two recorded quantities repair much of this. The rider's speed converts a camera's time-based sample into a distance-based one, and the drawn sample's road classes say how to reweight the route to the network. Neither is enough alone, and speed alone makes matters worse. Together they recover the truth in simulation, and in the data they move estimates by amounts that matter: several points in the share of women on Delhi's streets, and nearly half of the share of very loud noise readings.
 
-The applications show what the framework produces. Across Mumbai, Navi Mumbai, and Delhi, the people-weighted female share of visible pedestrians is roughly 18 to 24 percent, with predictable variation across road types and acquisition modes. In Delhi, the lower envelope of street-level noise exceeds the daytime residential ambient standard in 87 percent of measurement windows, and 31 percent of windows contain a peak at or above 100 dB. Both sets of estimates depend on a single design choice, that the sample is drawn from a known frame on the road network, with inclusion probabilities recorded and used.
+For new studies the simpler course is to keep the two designs apart. Observe at the sampled points when the question is about the network. Record continuously when the question is about travel, and say that the population is the route. The same sample can also support comparisons over time or between places if the protocol is repeated, though we have not done that here.
 
 \clearpage
 \bibliographystyle{plainnat}

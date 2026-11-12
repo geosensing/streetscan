@@ -11,6 +11,7 @@ storage URLs), or that repeat coordinates as a street address are left behind.
 
 import json
 
+import numpy as np
 import pandas as pd
 
 from streetscan.config import PROJECT_ROOT, RAW_DIR
@@ -20,6 +21,16 @@ STREETSCOPE = SIBLINGS / "streetscope"
 STREETSIGHT = SIBLINGS / "streetsight"
 SOUNDSCAPE = SIBLINGS / "soundscape"
 STREETAQI = SIBLINGS / "streetaqi"
+STREETSENSE = SIBLINGS / "streetsense"
+
+# city: (sample file, coded file); Dhaka was sampled but never coded.
+STREETSENSE_FILES = {
+    "bangkok": ("bangkok-roads-s1k.csv", "bangkok_mturk_2018_06_02.csv"),
+    "jakarta": ("jakarta-roads-s1k.csv", "jakarta_2_mturk_14_06_18.csv"),
+    "lagos": ("lagos-roads-s1k.csv", "lagos_mturk_2018_06_08.csv"),
+    "wayne": ("wayne2-roads-s5k.csv", "wayne_mturk_2018_06_11_18.csv"),
+    "dhaka": ("dhaka-roads-s1k.csv", None),
+}
 
 GOPRO_CITIES = ["mumbai", "navi_mumbai", "bangalore", "delhi"]
 GOPRO_COLUMNS = [
@@ -57,11 +68,72 @@ SAMPLE_FILES = {
 }
 
 
+SPEED_HALF_WINDOW_SEC = 10
+EARTH_RADIUS_M = 6371000
+MAX_PLAUSIBLE_SPEED_MPS = 40
+
+
+def haversine_m(lat1, lon1, lat2, lon2):
+    lat1, lon1, lat2, lon2 = map(np.radians, (lat1, lon1, lat2, lon2))
+    a = (
+        np.sin((lat2 - lat1) / 2) ** 2
+        + np.cos(lat1) * np.cos(lat2) * np.sin((lon2 - lon1) / 2) ** 2
+    )
+    return EARTH_RADIUS_M * 2 * np.arcsin(np.sqrt(a))
+
+
+def track_position(track, times, offset_sec):
+    """Track fix nearest to each frame time plus an offset, within two seconds."""
+    wanted = pd.DataFrame(
+        {"row": np.arange(len(times)), "when": times + pd.Timedelta(seconds=offset_sec)}
+    ).dropna()
+    found = pd.merge_asof(
+        wanted.sort_values("when"),
+        track,
+        left_on="when",
+        right_on="gps_datetime",
+        direction="nearest",
+        tolerance=pd.Timedelta(seconds=2),
+    )
+    return found.set_index("row").reindex(range(len(times)))
+
+
+def frame_speed(city, data):
+    """Rider speed at each frame, from the camera's GPS track around the frame.
+
+    Frames are cut at fixed time intervals, so a stretch of road is photographed
+    in proportion to the time spent on it. Speed is what converts between a
+    per-minute and a per-metre sample.
+    """
+    track = pd.read_parquet(
+        STREETSCOPE / "data" / city / "gps_index" / "gps_timeseries.parquet",
+        columns=["video_id", "gps_datetime", "lat", "lon"],
+    ).sort_values("gps_datetime")
+    track["gps_datetime"] = track["gps_datetime"].astype("datetime64[us]")
+    times = pd.to_datetime(data["frame_datetime"]).astype("datetime64[us]")
+    times = times.reset_index(drop=True)
+    before = track_position(track, times, -SPEED_HALF_WINDOW_SEC)
+    at = track_position(track, times, 0)
+    after = track_position(track, times, SPEED_HALF_WINDOW_SEC)
+    # Near the start or end of a video only one side of the window exists.
+    start = before.where(before["video_id"] == at["video_id"], at)
+    end = after.where(after["video_id"] == at["video_id"], at)
+    seconds = (end["gps_datetime"] - start["gps_datetime"]).dt.total_seconds()
+    metres = haversine_m(start["lat"], start["lon"], end["lat"], end["lon"])
+    speed = (metres / seconds).where(seconds >= SPEED_HALF_WINDOW_SEC)
+    # A motorbike in city traffic does not exceed 144 km/h; faster is a GPS jump.
+    speed = speed.where(speed <= MAX_PLAUSIBLE_SPEED_MPS)
+    return speed.round(2).to_numpy()
+
+
 def gopro_images():
     frames = []
     for city in GOPRO_CITIES:
         data = pd.read_parquet(STREETSCOPE / "data" / city / "analysis_data.parquet")
         frame = data[GOPRO_COLUMNS].copy()
+        frame["speed_mps"] = frame_speed(city, data)
+        frame.insert(0, "video", data["base_video_id"])
+        frame.insert(1, "frame_number", data["frame_number"])
         frame.insert(0, "image", data["image"].str.rsplit("/", n=1).str[-1])
         frame.insert(0, "city", city)
         frames.append(frame)
@@ -159,12 +231,48 @@ def streetview_tables():
     }
 
 
+def streetsense_segments():
+    """One row per sampled segment, with codes where Street View had an image."""
+    frames = []
+    for city, (sample_file, coded_file) in STREETSENSE_FILES.items():
+        sample = pd.read_csv(STREETSENSE / "data" / "geo_sample_out" / sample_file)
+        sample = sample[["segment_id", "osm_type", "start_lat", "start_long"]]
+        sample.insert(0, "city", city)
+        if coded_file is None:
+            covered = pd.read_csv(
+                STREETSENSE / "data" / "google_street_view_metadata" / f"{city}.csv"
+            )
+            sample["covered"] = sample["segment_id"].isin(covered["segment_id"])
+            frames.append(sample)
+            continue
+        coded = pd.read_csv(STREETSENSE / "data" / "mturk" / coded_file)
+        seen = coded["Answer.Do you see any of the following?"].fillna("")
+        road = coded["Answer.Does the road have any...?"].fillna("")
+        markings = coded["Answer.If there are any road markings are they clear?"]
+        codes = pd.DataFrame(
+            {
+                "segment_id": coded["Input.segment_id"],
+                "capture_date": coded["Input.date"],
+                "pothole": road.str.contains("Potholes").astype(int),
+                "crack": road.str.contains("Cracks").astype(int),
+                "litter": seen.str.contains("Litter").astype(int),
+                "paved_sidewalk": seen.str.contains("paved sidewalk").astype(int),
+                "markings_clear": markings.map({"Yes": 1, "No": 0}),
+            }
+        )
+        merged = sample.merge(codes, on="segment_id", how="left", validate="1:1")
+        merged["covered"] = merged["pothole"].notna()
+        frames.append(merged)
+    return pd.concat(frames, ignore_index=True)
+
+
 def main():
     tables = {
         "gopro_images.csv": gopro_images(),
         "gopro_sample_points.csv": gopro_sample_points(),
         "noise_readings.csv": noise_readings(),
         "air_readings.csv": air_readings(),
+        "streetsense_segments.csv": streetsense_segments(),
         **streetview_tables(),
     }
     for name, table in tables.items():

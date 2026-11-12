@@ -10,6 +10,7 @@ authors = [
     { name = "Gaurav Sood" },
 ]
 dependencies = [
+    "geoestimate",
     "matplotlib",
     "numpy",
     "pandas",
@@ -39,3 +40,6 @@ profile = "black"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+geoestimate = { git = "https://github.com/geosensing/geoestimate", rev = "8705c34205a1ab92b7fe78db31734e526e8606a8" }
