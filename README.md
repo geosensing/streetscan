@@ -21,11 +21,11 @@ Route samples are reported three ways: as collected, weighted by the rider's spe
 
 ## Key findings
 
-Drawing points at random is not enough when the instrument rides between them. In Delhi, 85% of sampled points are on residential roads but 25% of video frames are. Reweighting moves women's share of pedestrians in Delhi from 19.8% to 23.5%, and the share of noise readings peaking at or above 100 dB from 14.4% to 8.1%. In the simulation, intervals from the unadjusted route sample cover the truth 32% of the time; the adjusted ones cover it 95% of the time. Speed weighting alone makes the estimate worse.
+Drawing points at random is not enough when the instrument rides between them. In Delhi, 85% of sampled points are on residential roads but 27% of video frames are. Reweighting road classes to the drawn sample moves women's share of pedestrians in Delhi from 20.4% to 23.5%, a shift of 3.1 points (95% interval 0.5 to 6.8), and the share of noise readings peaking at or above 100 dB from 14.4% to 8.1%. In a simulation where road class is the only way routes differ from the city, intervals from the unadjusted route sample cover the truth 32% of the time and the reweighted ones 95%. Speed weighting alone makes the estimate worse.
 
 ![Women's share of pedestrians under each weighting of the video frames, and from Street View](figs/women.png)
 
-Whatever the weighting, women are a fifth to a quarter of pedestrians. The reweighted intervals are wide, and the reweighting corrects only for road class, not for which streets within a class a route uses.
+Across cities and weightings, women are 18% to 28% of pedestrians. The reweighted estimates rest on an assumption the design does not guarantee: that within a road class, the streets a route uses resemble those it does not.
 
 ## Reproduce
 

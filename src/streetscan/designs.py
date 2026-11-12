@@ -100,12 +100,45 @@ def clean_noise(noise):
     return noise
 
 
-def with_speed_weight(frames):
+def with_speed_weight(frames, min_speed=MIN_SPEED_MPS):
     """Frames with a usable GPS speed, weighted to represent distance."""
     frames = frames.dropna(subset=["speed_mps"]).copy()
-    frames["speed_weight"] = frames["speed_mps"].clip(lower=MIN_SPEED_MPS)
+    frames["speed_weight"] = frames["speed_mps"].clip(lower=min_speed)
     return frames
 
 
-def concat(rows):
-    return pd.DataFrame(rows)
+def weighted_ratio(data, numerator, denominator, weight):
+    return (weight * data[numerator]).sum() / (weight * data[denominator]).sum()
+
+
+def network_weight(data, by, shares, weight):
+    """Post-stratified weights as plain numbers, for resampling."""
+    cell_weight = weight.groupby(data[by]).sum()
+    covered = sum(shares.get(cell, 0.0) for cell in cell_weight.index)
+    target = data[by].map(lambda cell: shares.get(cell, 0.0) / covered)
+    return weight * target / data[by].map(cell_weight)
+
+
+def shift_interval(data, by, shares, cluster, numerator, denominator, seed, reps=2000):
+    """How far reweighting to the road network moves a ratio, with an interval.
+
+    The two estimates share frames, so their difference is far less variable
+    than either. Clusters are resampled whole and both are recomputed.
+    """
+    on_frame = data[data[by].map(lambda cell: shares.get(cell, 0.0) > 0)]
+    groups = [rows for _, rows in on_frame.groupby(cluster)]
+
+    def shift(rows):
+        ones = pd.Series(1.0, index=rows.index)
+        adjusted = network_weight(rows, by, shares, rows["speed_weight"])
+        return weighted_ratio(rows, numerator, denominator, adjusted) - (
+            weighted_ratio(rows, numerator, denominator, ones)
+        )
+
+    rng = np.random.default_rng(seed)
+    draws = []
+    for _ in range(reps):
+        picked = rng.integers(0, len(groups), size=len(groups))
+        draws.append(shift(pd.concat([groups[i] for i in picked], ignore_index=True)))
+    low, high = np.quantile(draws, [0.025, 0.975])
+    return {"estimate": shift(on_frame), "conf_low": low, "conf_high": high}

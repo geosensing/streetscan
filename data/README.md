@@ -7,7 +7,7 @@ SHA-256 hash before any analysis.
 | File | What it is | Source |
 |---|---|---|
 | `raw/gopro_images.csv` | One row per annotated video frame in Mumbai, Navi Mumbai, Bangalore and Delhi: counts of women and men on foot and on two-wheelers, GPS position, time, road class, street features, and `speed_mps`, the rider's speed over the 20 seconds around the frame, computed from the camera's GPS track | `geosensing/streetscope`, `data/<city>/analysis_data.parquet` |
-| `raw/gopro_sample_points.csv` | The 1,000 sampled points per city and the itinerary each was assigned to | `geosensing/streetscope`, `sampling/<city>/itineraries/` (Delhi: `delhi_nn`; Mumbai: `itineraries-mumbai-city.csv`) |
+| `raw/gopro_sample_points.csv` | The sampled points per city (1,000 in Mumbai, Bangalore and Delhi; 10,000 in Navi Mumbai, of which 8,126 were routed) and the itinerary each was assigned to | `geosensing/streetscope`, `sampling/<city>/itineraries/` (Delhi: `delhi_nn`; Mumbai: `itineraries-mumbai-city.csv`; Navi Mumbai: `sampled_points/sampled_points.geojson` and `itineraries/detailed_itineraries.csv`) |
 | `raw/streetview_sample.csv` | The 7,000 locations drawn for Street View in Mumbai, Navi Mumbai and Delhi | `geosensing/streetsight`, `data/samples/all_cities.csv` |
 | `raw/streetview_views.csv`, `raw/streetview_locations.csv` | Annotated Street View images (one per heading) and the same counts summed by location | `geosensing/streetsight`, `notebooks/outputs/v2/` |
 | `raw/streetview_funnel.csv`, `raw/streetview_selection.csv` | Counts at each step from eligible road segments to annotated images, by city and by road class | `geosensing/streetsight`, `notebooks/outputs/v2/` |
@@ -29,6 +29,7 @@ rider set out from.
 
 ## Known oddities
 
+- In streetscope, `sampling/navi_mumbai/itineraries/itineraries.csv` is a Delhi draw, not Navi Mumbai's sample, and the geo-sampling files label longitude `start_lat` and latitude `start_long`. The import corrects for both, and a test checks that each city's points lie where its frames do.
 - `gopro_images.csv`: `speed_mps` is blank where the track has no fix within two seconds of the frame, and where the implied speed exceeds 40 m/s (a GPS jump).
 - `noise_readings.csv` has two rows marked "Duplicate" with no values.
 - `noise_readings.csv` has one reading entered twice (day 1, itinerary 11, note "1st stop") with the minimum and maximum reversed (84.1 and 60.7).

@@ -82,6 +82,7 @@ macros = {}
 # Women's share of pedestrians: video under three weightings, and Street View.
 VIDEO = ["per minute of riding", "per metre of route", "road network"]
 women_rows = []
+location_gaps, floor_gaps = [], []
 for city in CITY_ORDER:
     cells = [CITY_LABELS[city]]
     for estimator in VIDEO:
@@ -117,6 +118,36 @@ for city in CITY_ORDER:
         "gopro", city, "women_share_location_mean", "per minute of riding"
     )
     macros[f"video location mean {key}"] = percent(location_mean["estimate"])
+    per_minute = pick("gopro", city, "women_share", "per minute of riding")
+    location_gaps.append(abs(location_mean["estimate"] - per_minute["estimate"]))
+    macros[f"speed frames {key}"] = count(int(per_minute["n"]))
+    macros[f"speed days {key}"] = str(int(per_minute["n_clusters"]))
+    shift = pick("gopro", city, "women_share", "road network minus per minute")
+    macros[f"shift {key}"] = percent(shift["estimate"])
+    macros[f"shift low {key}"] = percent(shift["conf_low"])
+    macros[f"shift high {key}"] = percent(shift["conf_high"])
+    classes_only = pick("gopro", city, "women_share", "road classes only")
+    macros[f"classes only {key}"] = percent(classes_only["estimate"])
+    for name in ("residential", "major"):
+        in_class = pick("gopro", city, "women_share", f"class: {name}")
+        macros[f"class {name} {key}"] = percent(in_class["estimate"])
+        macros[f"class frames {name} {key}"] = count(int(mix.loc[name, "frames"]))
+    macros[f"points {key}"] = count(int((points["city"] == city).sum()))
+    macros[f"pedestrians counted {key}"] = count(
+        int(city_frames["total_pedestrians"].sum())
+    )
+    macros[f"topcoded men {key}"] = percent(city_frames["men_count_topcoded"].mean())
+    when = pd.to_datetime(city_frames["frame_datetime_ist"])
+    gaps = when.groupby(city_frames["video"]).apply(
+        lambda times: times.sort_values().diff().dt.total_seconds()
+    )
+    macros[f"frame gap {key}"] = f"{gaps.median():.0f}"
+    floors = [
+        pick("gopro", city, "women_share", f"road network, floor {floor}")["estimate"]
+        for floor in (0.1, 1.0)
+    ]
+    network = pick("gopro", city, "women_share", "road network")["estimate"]
+    floor_gaps.append(max(abs(value - network) for value in floors))
 write_table(
     women_rows,
     TABLE_DIR / "women.tex",
@@ -133,9 +164,20 @@ for estimator in VIDEO:
     row = pick("gopro", "delhi", "pedestrians_per_frame", estimator)
     macros[f"pedestrians Delhi {estimator}"] = f"{row['estimate']:.2f}"
 macros["frames total"] = count(len(frames))
+macros["location gap max"] = percent(max(location_gaps))
+macros["floor gap max"] = percent(max(floor_gaps))
+# Video names end in itinerary.leg, which says which itineraries were ridden.
+for city in ("delhi", "bangalore"):
+    names = frames.loc[frames["city"] == city, "video"]
+    ridden = names.str.extract(r"(\d+)\.\d+$")[0].nunique()
+    planned = points.loc[points["city"] == city, "itinerary_id"].nunique()
+    macros[f"ridden {macro_key(city)}"] = str(ridden)
+    macros[f"planned {macro_key(city)}"] = str(planned)
 
 video_ratio = estimates[
-    (estimates["application"] == "gopro") & (estimates["outcome"] == "women_share")
+    (estimates["application"] == "gopro")
+    & (estimates["outcome"] == "women_share")
+    & estimates["estimator"].isin(VIDEO)
 ]
 se_ratio = video_ratio["standard_error"] / video_ratio["naive_standard_error"]
 macros["video se ratio min"] = f"{se_ratio.min():.1f}"
@@ -146,6 +188,7 @@ for city, row in funnel.iterrows():
     macros[f"streetview sampled {key}"] = count(int(row["selected_locations"]))
     macros[f"streetview covered {key}"] = percent(row["coverage_rate"], 0)
     macros[f"streetview coded {key}"] = count(int(row["annotated_locations"]))
+    macros[f"streetview drawn {key}"] = count(int(row["initial_sample_locations"]))
 
 # Road condition from Street View at sampled segments.
 OUTCOMES = {
@@ -210,7 +253,7 @@ write_table(
     noise_rows,
     TABLE_DIR / "noise.tex",
     "lccc",
-    ["", "Planned stops, as read", "Planned stops, road network", "Traffic stops"],
+    ["", "As read", "Road network", "Traffic stops"],
 )
 planned = noise[~noise["is_traffic_stop"]]
 delhi_points = points[points["city"] == "delhi"]
@@ -237,7 +280,7 @@ macros["noise se ratio max"] = f"{noise_se_ratio.max():.1f}"
 # Air in Delhi.
 pm25 = pick("air", "delhi", "pm25", "as read")
 macros["air readings"] = str(int(pm25["n"]))
-macros["air itineraries"] = str(int(pm25["n_clusters"]))
+macros["air days"] = str(int(pm25["n_clusters"]))
 macros["air pm"] = f"{pm25['estimate']:.0f}"
 macros["air pm low"] = f"{pm25['conf_low']:.0f}"
 macros["air pm high"] = f"{pm25['conf_high']:.0f}"
@@ -247,6 +290,7 @@ SIMULATED = {
     "point sample": "Point sample",
     "route, per minute": "Route sample, per minute",
     "route, per metre": "Route sample, per metre",
+    "route, road classes only": "Route sample, road classes only",
     "route, road network": "Route sample, road network",
 }
 simulation_rows = []

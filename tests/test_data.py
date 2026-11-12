@@ -66,7 +66,24 @@ def test_no_identifying_columns_or_values(name):
         assert not values.str.contains(r"@|https?://", regex=True).any(), column
 
 
-def test_sample_points_are_one_thousand_per_city():
+def test_sample_points_lie_where_the_frames_do():
+    """Each city's drawn points and its video frames are in the same city."""
     points = read_raw("gopro_sample_points.csv")
-    assert points.groupby("city").size().eq(1000).all()
-    assert not pd.isna(points[["lat", "lon", "itinerary_id"]]).any().any()
+    frames = read_raw("gopro_images.csv").query("gps_valid")
+    assert not pd.isna(points[["lat", "lon"]]).any().any()
+    for city, drawn in points.groupby("city"):
+        seen = frames[frames["city"] == city]
+        assert abs(drawn["lat"].median() - seen["gps_lat"].median()) < 0.2, city
+        assert abs(drawn["lon"].median() - seen["gps_lon"].median()) < 0.2, city
+
+
+def test_sample_sizes():
+    sizes = read_raw("gopro_sample_points.csv").groupby("city").size()
+    assert sizes.to_dict() == {
+        "bangalore": 1000,
+        "delhi": 1000,
+        "mumbai": 1000,
+        "navi_mumbai": 10000,
+    }
+    routed = read_raw("gopro_sample_points.csv").dropna(subset=["itinerary_id"])
+    assert (routed["city"] == "navi_mumbai").sum() == 8126

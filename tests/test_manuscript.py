@@ -8,13 +8,17 @@ MANUSCRIPT = (PROJECT_ROOT / "ms" / "main.tex").read_text()
 BODY = MANUSCRIPT.split(r"\begin{abstract}")[1].split(r"\clearpage")[0]
 
 
-def test_every_macro_used_is_defined():
-    defined = set(re.findall(r"\\newcommand{\\(\w+)}", MANUSCRIPT))
+def test_every_generated_macro_used_is_defined():
     generated = (TABLE_DIR / "macros.tex").read_text()
-    defined |= set(re.findall(r"\\newcommand{\\(\w+)}", generated))
-    used = set(re.findall(r"\\((?:video|streetview|noise|air|sim|condition)\w*)", BODY))
-    used |= set(re.findall(r"\\((?:frames|days|nearest|sample|frame|kmh)\w+)", BODY))
-    assert not used - defined
+    defined = set(re.findall(r"\\newcommand{\\(\w+)}", generated))
+    prefixes = sorted({name[:5] for name in defined})
+    used = {
+        name
+        for name in re.findall(r"\\([A-Za-z]+)", BODY)
+        if any(name.startswith(prefix) for prefix in prefixes) and len(name) > 8
+    }
+    latex_words = {"simulation", "framebox", "samplesize", "classification"}
+    assert not used - defined - latex_words
 
 
 def test_no_typed_percentages_with_decimals():
@@ -23,5 +27,5 @@ def test_no_typed_percentages_with_decimals():
 
 
 def test_headline_numbers_are_not_typed():
-    for typed in ["19.8", "23.5", "18.7", "14.4", "8.1", "27.4"]:
+    for typed in ["20.4", "23.5", "18.7", "14.4", "8.1", "27.5"]:
         assert typed not in BODY

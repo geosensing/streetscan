@@ -23,6 +23,9 @@ FRAME_INTERVAL_SEC = 60
 N_DAYS = 12
 SEGMENTS_PER_DAY = 150
 POINT_SAMPLE_SIZE = 600
+# The applications learn the city's road-class mix from a drawn sample of
+# this size, not from the frame itself.
+SHARE_SAMPLE_SIZE = 1000
 
 CLASSES = pd.DataFrame(
     {
@@ -87,13 +90,19 @@ def route_sample(city, rng):
     frames = pd.concat(days, ignore_index=True)
     frames["speed_weight"] = frames["speed_mps"].clip(lower=MIN_SPEED_MPS)
     ratio = ("women", "pedestrians")
+    drawn = city["road_class"].sample(SHARE_SAMPLE_SIZE, random_state=rng)
+    shares = drawn.value_counts(normalize=True).to_dict()
+    unweighted = Sample(frames, cluster="day")
     weighted = Sample(frames, cluster="day", weights="speed_weight")
     return {
-        "route, per minute": Sample(frames, cluster="day").ratio(*ratio),
+        "route, per minute": unweighted.ratio(*ratio),
         "route, per metre": weighted.ratio(*ratio),
-        "route, road network": weighted.post_stratify(
-            "road_class", CLASSES["frame_share"].to_dict()
+        "route, road classes only": unweighted.post_stratify(
+            "road_class", shares
         ).ratio(*ratio),
+        "route, road network": weighted.post_stratify("road_class", shares).ratio(
+            *ratio
+        ),
     }
 
 

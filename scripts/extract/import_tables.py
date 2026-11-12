@@ -62,7 +62,6 @@ GOPRO_COLUMNS = [
 # Each city's drawn sample was saved in whatever shape its sampler produced.
 SAMPLE_FILES = {
     "mumbai": "mumbai/itineraries/itineraries-mumbai-city.csv",
-    "navi_mumbai": "navi_mumbai/itineraries/itineraries.csv",
     "bangalore": "bangalore/itineraries/itineraries.csv",
     "delhi": "delhi_nn/itineraries/itineraries.csv",
 }
@@ -145,16 +144,15 @@ def gopro_sample_points():
     for city, relative in SAMPLE_FILES.items():
         data = pd.read_csv(STREETSCOPE / "sampling" / relative)
         if "start_lat" in data:
-            # geo-sampling output: one row per sampled segment.
+            # geo-sampling output: one row per sampled segment. Its start_lat
+            # column holds longitude and start_long latitude.
             points = pd.DataFrame(
                 {
                     "point_id": range(len(data)),
                     "itinerary_id": data["itinerary_id"],
-                    "lat": data["start_lat"],
-                    "lon": data["start_long"],
+                    "lat": data["start_long"],
+                    "lon": data["start_lat"],
                     "road_class": data["type"],
-                    "osm_id": data["osm_id"],
-                    "segment_length_m": data["LENGTH_M"],
                 }
             )
         else:
@@ -163,7 +161,39 @@ def gopro_sample_points():
             ]
         points.insert(0, "city", city)
         frames.append(points)
+    frames.append(navi_mumbai_sample_points())
     return pd.concat(frames, ignore_index=True)
+
+
+def navi_mumbai_sample_points():
+    """Navi Mumbai drew 10,000 points and routed 8,126 of them.
+
+    navi_mumbai/itineraries/itineraries.csv is not this sample: it is a Delhi
+    draw saved in the wrong folder.
+    """
+    folder = STREETSCOPE / "sampling" / "navi_mumbai"
+    with open(folder / "sampled_points" / "sampled_points.geojson") as handle:
+        features = json.load(handle)["features"]
+    points = pd.DataFrame(
+        {
+            "point_id": [f["properties"]["point_id"] for f in features],
+            "lat": [f["geometry"]["coordinates"][1] for f in features],
+            "lon": [f["geometry"]["coordinates"][0] for f in features],
+            "road_class": [f["properties"]["highway_type"] for f in features],
+        }
+    )
+    # A way tagged with two classes is stored as a list; keep the first.
+    points["road_class"] = points["road_class"].map(
+        lambda value: value[0] if isinstance(value, list) else value
+    )
+    routed = pd.read_csv(folder / "itineraries" / "detailed_itineraries.csv")
+    routed = routed.rename(columns={"route_id": "itinerary_id"})
+    points = points.merge(
+        routed[["point_id", "itinerary_id"]], on="point_id", how="left", validate="1:1"
+    )
+    points["itinerary_id"] = points["itinerary_id"].astype("Int64")
+    points.insert(0, "city", "navi_mumbai")
+    return points[["city", "point_id", "itinerary_id", "lat", "lon", "road_class"]]
 
 
 def noise_readings():

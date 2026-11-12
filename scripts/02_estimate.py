@@ -10,6 +10,7 @@ from streetscan.designs import (
     clean_noise,
     post_stratified,
     road_class,
+    shift_interval,
     with_speed_weight,
 )
 from streetscan.sources import read_raw
@@ -22,6 +23,8 @@ STREETSENSE_OUTCOMES = [
     "markings_clear",
 ]
 NOISE_THRESHOLDS = {"min_db": 55, "max_db": 100}
+SPEED_FLOORS = [0.1, 1.0]
+SEED = 20261112
 
 
 def streetsense():
@@ -90,48 +93,78 @@ def streetview_women():
 
 
 def gopro():
-    """Route sample: frames cut from video at fixed time intervals."""
+    """Route sample: frames cut from video at fixed time intervals.
+
+    Every estimator uses the frames that have a GPS speed, so that differences
+    between them come from the weighting and not from which frames are in.
+    """
     frames = read_raw("gopro_images.csv")
     points = read_raw("gopro_sample_points.csv")
     frames["road_class"] = road_class(frames["osm_highway"])
     points["road_class"] = road_class(points["road_class"])
+    ratio = ("women_count", "total_pedestrians")
     rows, mix = [], []
     for city, data in frames.groupby("city", sort=False):
         shares = class_shares(points.loc[points["city"] == city, "road_class"])
         moving = with_speed_weight(data)
         by_day = {"cluster": "collection_day"}
         weighted = {"cluster": "collection_day", "weights": "speed_weight"}
-        network, covered_share = post_stratified(
-            moving, "road_class", shares, **weighted
-        )
         samples = {
-            "per minute of riding": (Sample(data, **by_day), None),
+            "per minute of riding": (Sample(moving, **by_day), None),
             "per metre of route": (Sample(moving, **weighted), None),
-            "road network": (network, covered_share),
+            "road classes only": post_stratified(
+                moving, "road_class", shares, **by_day
+            ),
+            "road network": post_stratified(moving, "road_class", shares, **weighted),
         }
+        for floor in SPEED_FLOORS:
+            refloored = with_speed_weight(data, floor)
+            samples[f"road network, floor {floor}"] = post_stratified(
+                refloored, "road_class", shares, **weighted
+            )
         for estimator, (sample, share) in samples.items():
             labels = {"application": "gopro", "city": city, "estimator": estimator}
             extra = {} if share is None else {"covered_share": share}
-            rows += [
-                as_row(
-                    sample.ratio("women_count", "total_pedestrians"),
-                    **labels,
-                    outcome="women_share",
-                    **extra,
-                ),
+            rows.append(
+                as_row(sample.ratio(*ratio), **labels, outcome="women_share", **extra)
+            )
+            rows.append(
                 as_row(
                     sample.mean("total_pedestrians"),
                     **labels,
                     outcome="pedestrians_per_frame",
                     **extra,
+                )
+            )
+        for name, in_class in moving.groupby("road_class"):
+            if in_class["collection_day"].nunique() < 2:
+                continue
+            rows.append(
+                as_row(
+                    Sample(in_class, **by_day).ratio(*ratio),
+                    application="gopro",
+                    city=city,
+                    estimator=f"class: {name}",
+                    outcome="women_share",
+                )
+            )
+        rows.append(
+            {
+                "application": "gopro",
+                "city": city,
+                "estimator": "road network minus per minute",
+                "outcome": "women_share",
+                "n": len(moving),
+                "n_clusters": moving["collection_day"].nunique(),
+                **shift_interval(
+                    moving, "road_class", shares, "collection_day", *ratio, seed=SEED
                 ),
-            ]
-        nonempty = data[data["total_pedestrians"] > 0]
+            }
+        )
+        nonempty = moving[moving["total_pedestrians"] > 0]
         rows.append(
             as_row(
-                Sample(nonempty, **by_day).mean_of_ratios(
-                    "women_count", "total_pedestrians"
-                ),
+                Sample(nonempty, **by_day).mean_of_ratios(*ratio),
                 application="gopro",
                 city=city,
                 estimator="per minute of riding",
@@ -140,22 +173,25 @@ def gopro():
         )
         distance = moving.groupby("road_class")["speed_weight"].sum()
         for name in sorted(set(shares) | set(data["road_class"])):
+            in_class = moving["road_class"] == name
             mix.append(
                 {
                     "city": city,
                     "road_class": name,
                     "sample_share": shares.get(name, 0.0),
-                    "frame_share": (data["road_class"] == name).mean(),
+                    "frame_share": in_class.mean(),
                     "distance_share": distance.get(name, 0.0) / distance.sum(),
-                    "median_kmh": 3.6
-                    * data.loc[data["road_class"] == name, "speed_mps"].median(),
+                    "median_kmh": 3.6 * moving.loc[in_class, "speed_mps"].median(),
+                    "frames": int(in_class.sum()),
+                    "pedestrians": int(moving.loc[in_class, ratio[1]].sum()),
                 }
             )
     return rows, pd.DataFrame(mix)
 
 
 def delhi_sensor_rows(readings, shares, application, outcomes, thresholds):
-    by_route = {"cluster": "itinerary_id"}
+    # A day shares a rider, weather and part of the city across its itineraries.
+    by_route = {"cluster": "day"}
     network, covered_share = (
         post_stratified(readings, "road_class", shares, **by_route)
         if shares is not None
