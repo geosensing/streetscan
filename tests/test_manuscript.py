@@ -29,3 +29,9 @@ def test_no_typed_percentages_with_decimals():
 def test_headline_numbers_are_not_typed():
     for typed in ["20.4", "23.5", "18.7", "14.4", "8.1", "27.5"]:
         assert typed not in BODY
+
+
+def test_every_reference_has_a_label():
+    labels = set(re.findall(r"\\label{([^}]+)}", MANUSCRIPT))
+    references = set(re.findall(r"\\ref{([^}]+)}", MANUSCRIPT))
+    assert not references - labels

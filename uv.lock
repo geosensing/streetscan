@@ -229,7 +229,7 @@ wheels = [
 [[package]]
 name = "geoestimate"
 version = "0.1.1"
-source = { git = "https://github.com/geosensing/geoestimate?rev=8705c34205a1ab92b7fe78db31734e526e8606a8#8705c34205a1ab92b7fe78db31734e526e8606a8" }
+source = { git = "https://github.com/geosensing/geoestimate?rev=f9ba3a24ccf1249356b8da8a541cdaefcd610fe1#f9ba3a24ccf1249356b8da8a541cdaefcd610fe1" }
 dependencies = [
     { name = "numpy" },
     { name = "pandas" },
@@ -967,7 +967,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "geoestimate", git = "https://github.com/geosensing/geoestimate?rev=8705c34205a1ab92b7fe78db31734e526e8606a8" },
+    { name = "geoestimate", git = "https://github.com/geosensing/geoestimate?rev=f9ba3a24ccf1249356b8da8a541cdaefcd610fe1" },
     { name = "matplotlib" },
     { name = "networkx", specifier = ">=3.7" },
     { name = "numpy" },

@@ -114,6 +114,13 @@ Speed comes from the camera's GPS track. A stationary frame would get no weight,
 
 This removes the imbalance across road classes. It cannot remove differences within a class between the streets a route uses and the streets it does not. Section~\ref{sec:route} makes this exact: a route sample has a rate of inclusion that the design determines, and post-stratification replaces that rate with its average in each road class.
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{roadmix}
+\caption{Road classes of the sampled points and of the video frames recorded while riding between them. Each panel is a city. Blue points give the share of the sampled points in each OpenStreetMap road class; black points give the share of annotated video frames, classed by the nearest mapped road. ``Other'' includes service roads, footways, unclassified roads, and frames with no mapped road nearby.}
+\label{fig:roadmix}
+\end{figure}
+
 The rider also did not complete every itinerary. Video names identify \riddenDelhi{} of Delhi's \plannedDelhi{} itineraries and \riddenBangalore{} of Bangalore's \plannedBangalore, and we do not know how those were chosen.
 
 Which of the three quantities is wanted depends on the question. Per minute of riding is the rider's experience. Per meter of route describes the roads ridden. Reweighted to the frame is the closest a route sample comes to the road network.
