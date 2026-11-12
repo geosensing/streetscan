@@ -1,0 +1,4 @@
+city,eligible_road_segments,initial_sample_locations,selected_locations,covered_locations,coverage_rate,available_views,annotated_views,annotated_locations,annotation_rate_of_covered_locations,mean_annotated_views_per_location,positive_pedestrian_views,positive_pedestrian_locations,pedestrian_sightings
+Delhi,580608,2500,1500,1171,0.7806666666666666,4684,769,500,0.4269854824935952,1.538,375,282,1453
+Mumbai,126827,2500,1500,1246,0.8306666666666667,4984,636,498,0.3996789727126806,1.2771084337349397,427,359,2270
+Navi Mumbai,125804,2000,1500,1134,0.756,4535,537,437,0.3853615520282187,1.22883295194508,247,217,1014
