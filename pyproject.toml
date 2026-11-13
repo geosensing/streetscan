@@ -44,7 +44,7 @@ profile = "black"
 testpaths = ["tests"]
 
 [tool.uv.sources]
-geoestimate = { git = "https://github.com/geosensing/geoestimate", rev = "f9ba3a24ccf1249356b8da8a541cdaefcd610fe1" }
+geoestimate = { git = "https://github.com/geosensing/geoestimate", rev = "b169b4d57e4334bedd6e77eaa00f63bdd882cd6d" }
 
 [tool.codespell]
 builtin = "clear,rare,en-GB_to_en-US"
