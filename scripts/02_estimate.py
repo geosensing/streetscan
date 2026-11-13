@@ -9,7 +9,7 @@ from streetscan.designs import (
     class_shares,
     clean_noise,
     cluster_bootstrap_difference,
-    metres_to_nearest,
+    meters_to_nearest,
     post_stratified,
     road_class,
     shift_interval,
@@ -116,7 +116,7 @@ def gopro():
         weighted = {"cluster": "collection_day", "weights": "speed_weight"}
         samples = {
             "per minute of riding": (Sample(moving, **by_day), None),
-            "per metre of route": (Sample(moving, **weighted), None),
+            "per meter of route": (Sample(moving, **weighted), None),
             "road classes only": post_stratified(
                 moving, "road_class", shares, **by_day
             ),
@@ -209,7 +209,7 @@ def within_class():
     for city, data in frames.groupby("city", sort=False):
         drawn = points[points["city"] == city]
         data = data.assign(
-            near=metres_to_nearest(
+            near=meters_to_nearest(
                 data["gps_lat"], data["gps_lon"], drawn["lat"], drawn["lon"]
             )
             <= NEAR_M

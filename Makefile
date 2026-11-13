@@ -22,6 +22,7 @@ lint:
 	uv run isort --check-only $(SOURCES)
 	uv run black --check $(SOURCES)
 	uv run flake8 $(SOURCES)
+	uv run codespell
 
 test: analysis
 	uv run pytest

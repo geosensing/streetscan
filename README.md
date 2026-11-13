@@ -10,14 +10,14 @@ Researchers measure streets with cameras and sensors: who is visible in public, 
 
 ## Data and research design
 
-The frame is the road network from OpenStreetMap, cut into 500-metre segments. [geo-sampling](https://github.com/geosensing/geo-sampling) draws the sample, [allocator](https://github.com/geosensing/allocator) groups sampled points into field routes, and [geoestimate](https://github.com/geosensing/geoestimate) produces estimates and standard errors.
+The frame is the road network from OpenStreetMap, cut into 500-meter segments. [geo-sampling](https://github.com/geosensing/geo-sampling) draws the sample, [allocator](https://github.com/geosensing/allocator) groups sampled points into field routes, and [geoestimate](https://github.com/geosensing/geoestimate) produces estimates and standard errors.
 
 The applications fall into two designs.
 
 - **Point samples.** The unit observed is the unit drawn: Street View images at sampled segments. Road condition in Bangkok, Jakarta, Lagos and Wayne County, Michigan ([streetsense](https://github.com/geosensing/streetsense)); women's share of pedestrians in Mumbai, Navi Mumbai and Delhi ([streetsight](https://github.com/geosensing/streetsight)).
 - **Route samples.** A rider travels between sampled points and the instrument observes the route: video frames cut at fixed time intervals in Mumbai, Navi Mumbai, Delhi and Bangalore ([streetscope](https://github.com/geosensing/streetscope)), and sound-meter and air-monitor readings in Delhi ([soundscape](https://github.com/geosensing/soundscape), [streetaqi](https://github.com/geosensing/streetaqi)).
 
-Route samples are reported three ways: as collected, weighted by the rider's speed (which turns a per-minute sample into a per-metre one), and also reweighted so road classes have their share in the drawn sample. A simulation with a known truth checks the estimators.
+Route samples are reported three ways: as collected, weighted by the rider's speed (which turns a per-minute sample into a per-meter one), and also reweighted so road classes have their share in the drawn sample. A simulation with a known truth checks the estimators.
 
 ## Key findings
 

@@ -8,7 +8,7 @@ and v is the speed there. If so, weighting a frame by v / m recovers the
 network without any model. m is found by rerunning the draw and the routing.
 
 The outcome is built as a stress test: within each road class, the streets the
-routing rule favours are busier and more male. Reweighting by road class
+routing rule favors are busier and more male. Reweighting by road class
 cannot see that, so it should stay biased; weighting by v / m should not.
 """
 
@@ -105,12 +105,12 @@ def draw_traversals():
 intensity = np.mean([draw_traversals() for _ in range(DESIGN_DRAWS)], axis=0)
 edges["intensity"] = intensity
 
-favoured = edges.groupby("road_class")["intensity"].transform(
+favored = edges.groupby("road_class")["intensity"].transform(
     lambda x: (np.log(x) - np.log(x).mean()) / np.log(x).std()
 )
 base = edges["road_class"].map({"major": 0.15, "residential": 0.26})
-edges["women_share"] = (base - 0.05 * favoured).clip(0.02, 0.6)
-edges["pedestrians"] = np.exp(0.4 * favoured) * edges["road_class"].map(
+edges["women_share"] = (base - 0.05 * favored).clip(0.02, 0.6)
+edges["pedestrians"] = np.exp(0.4 * favored) * edges["road_class"].map(
     {"major": 0.9, "residential": 1.6}
 )
 
@@ -133,7 +133,7 @@ for _ in range(REPLICATIONS):
     draws.append(
         {
             "per minute": ratio(frames, pd.Series(1.0, index=frames.index)),
-            "per metre": ratio(frames, speed),
+            "per meter": ratio(frames, speed),
             "road network": ratio(frames, by_class),
             "design weights": ratio(frames, speed / frames["intensity"]),
         }

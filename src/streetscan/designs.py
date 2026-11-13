@@ -38,7 +38,7 @@ ROAD_CLASSES = {
 }
 
 # A frame's weight is its speed, so a stationary frame would get none. It still
-# shows a place on the route; half a metre per second is walking pace in a jam.
+# shows a place on the route; half a meter per second is walking pace in a jam.
 MIN_SPEED_MPS = 0.5
 
 
@@ -148,11 +148,11 @@ def shift_interval(data, by, shares, cluster, numerator, denominator, seed, reps
 EARTH_RADIUS_M = 6371000
 
 
-def metres_to_nearest(lat, lon, target_lat, target_lon):
-    """Distance from each position to the nearest target, in metres.
+def meters_to_nearest(lat, lon, target_lat, target_lon):
+    """Distance from each position to the nearest target, in meters.
 
-    Positions are projected onto a plane tangent at the targets' centre, which
-    is accurate to well under a metre across a city.
+    Positions are projected onto a plane tangent at the targets' center, which
+    is accurate to well under a meter across a city.
     """
     lat0 = np.radians(np.mean(target_lat))
 

@@ -80,7 +80,7 @@ def nearest_point_m(readings, sampled):
 macros = {}
 
 # Women's share of pedestrians: video under three weightings, and Street View.
-VIDEO = ["per minute of riding", "per metre of route", "road network"]
+VIDEO = ["per minute of riding", "per meter of route", "road network"]
 women_rows = []
 location_gaps, floor_gaps = [], []
 for city in CITY_ORDER:
@@ -155,7 +155,7 @@ write_table(
     [
         "",
         "Per minute of riding",
-        "Per metre of route",
+        "Per meter of route",
         "Road network",
         "Street View",
     ],
@@ -289,7 +289,7 @@ macros["air pm high"] = f"{pm25['conf_high']:.0f}"
 SIMULATED = {
     "point sample": "Point sample",
     "route, per minute": "Route sample, per minute",
-    "route, per metre": "Route sample, per metre",
+    "route, per meter": "Route sample, per meter",
     "route, road classes only": "Route sample, road classes only",
     "route, road network": "Route sample, road network",
 }
@@ -329,7 +329,7 @@ route_check = pd.read_csv(TABLE_DIR / "route_simulation_check.csv")
 route_check = route_check.set_index("quantity")["value"]
 ROUTE_ROWS = {
     "per minute": "Per minute",
-    "per metre": "Per metre (speed weights)",
+    "per meter": "Per meter (speed weights)",
     "road network": "Speed weights, reweighted by road class",
     "design weights": "Design weights (speed over traversal intensity)",
 }

@@ -96,7 +96,7 @@ def route_sample(city, rng):
     weighted = Sample(frames, cluster="day", weights="speed_weight")
     return {
         "route, per minute": unweighted.ratio(*ratio),
-        "route, per metre": weighted.ratio(*ratio),
+        "route, per meter": weighted.ratio(*ratio),
         "route, road classes only": unweighted.post_stratify(
             "road_class", shares
         ).ratio(*ratio),

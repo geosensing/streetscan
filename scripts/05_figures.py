@@ -23,7 +23,7 @@ road_mix = pd.read_csv(TABLE_DIR / "gopro_road_mix.csv")
 
 WOMEN_ROWS = [
     ("gopro", "per minute of riding", "Video, per minute of riding"),
-    ("gopro", "per metre of route", "Video, per metre of route"),
+    ("gopro", "per meter of route", "Video, per meter of route"),
     ("gopro", "road network", "Video, reweighted to the road network"),
     ("streetview", "road-class adjusted", "Street View, sampled locations"),
 ]
@@ -53,14 +53,14 @@ def women_share_figure():
             row = row.iloc[0]
             position = len(labels)
             labels.append(label)
-            colour = ACCENT if estimator == "road network" else INK
+            color = ACCENT if estimator == "road network" else INK
             axis.plot(
                 [100 * row["conf_low"], 100 * row["conf_high"]],
                 [position, position],
-                color=colour,
+                color=color,
                 linewidth=1.2,
             )
-            axis.plot(100 * row["estimate"], position, "o", color=colour, markersize=4)
+            axis.plot(100 * row["estimate"], position, "o", color=color, markersize=4)
         axis.set_yticks(range(len(labels)), labels)
         axis.set_ylim(len(labels) - 0.5, -0.5)
         axis.set_title(CITY_LABELS[city])
@@ -94,10 +94,10 @@ def road_mix_figure():
     )
     axes[0].set_ylim(len(ROAD_CLASS_ORDER) - 0.5, -0.5)
     # Label the two series once, where they sit furthest apart.
-    labelled = "delhi"
-    delhi = road_mix[road_mix["city"] == labelled].set_index("road_class")
-    axis = axes[CITY_ORDER.index(labelled)]
-    for column, text, colour in [
+    labeled = "delhi"
+    delhi = road_mix[road_mix["city"] == labeled].set_index("road_class")
+    axis = axes[CITY_ORDER.index(labeled)]
+    for column, text, color in [
         ("sample_share", "drawn\nsample", ACCENT),
         ("frame_share", "video\nframes", INK),
     ]:
@@ -106,7 +106,7 @@ def road_mix_figure():
             (100 * delhi.loc["residential", column], 0),
             xytext=(0, -7),
             textcoords="offset points",
-            color=colour,
+            color=color,
             fontsize=7,
             ha="center",
             va="top",

@@ -24,6 +24,7 @@ Repository = "https://github.com/geosensing/streetscan"
 [dependency-groups]
 dev = [
     "black",
+    "codespell",
     "flake8",
     "isort",
     "pytest",
@@ -44,3 +45,8 @@ testpaths = ["tests"]
 
 [tool.uv.sources]
 geoestimate = { git = "https://github.com/geosensing/geoestimate", rev = "f9ba3a24ccf1249356b8da8a541cdaefcd610fe1" }
+
+[tool.codespell]
+builtin = "clear,rare,en-GB_to_en-US"
+skip = "*.pdf,*.png,*.lock,*.aux,*.bbl,*.log,*.fls,*.fdb_latexmk,./data/raw,./.venv,./.git"
+ignore-words-list = "frome"

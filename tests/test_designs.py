@@ -23,7 +23,7 @@ def test_road_class_collapses_links_and_unknowns():
     ]
 
 
-def test_speed_weight_recovers_a_per_metre_share():
+def test_speed_weight_recovers_a_per_meter_share():
     """A camera on a timer sees a slow road in proportion to the time on it."""
     slow = pd.DataFrame({"speed_mps": 2.0, "women": 1, "people": 2}, index=range(50))
     fast = pd.DataFrame({"speed_mps": 10.0, "women": 0, "people": 2}, index=range(10))
@@ -31,9 +31,9 @@ def test_speed_weight_recovers_a_per_metre_share():
     frames = with_speed_weight(pd.concat([slow, fast], ignore_index=True))
     weight = frames["speed_weight"]
     per_minute = frames["women"].sum() / frames["people"].sum()
-    per_metre = (weight * frames["women"]).sum() / (weight * frames["people"]).sum()
+    per_meter = (weight * frames["women"]).sum() / (weight * frames["people"]).sum()
     assert per_minute == pytest.approx(50 / 120)
-    assert per_metre == pytest.approx(0.25)
+    assert per_meter == pytest.approx(0.25)
 
 
 def test_speed_weight_drops_missing_and_floors_stationary_frames():

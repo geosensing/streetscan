@@ -102,7 +102,7 @@ def frame_speed(city, data):
 
     Frames are cut at fixed time intervals, so a stretch of road is photographed
     in proportion to the time spent on it. Speed is what converts between a
-    per-minute and a per-metre sample.
+    per-minute and a per-meter sample.
     """
     track = pd.read_parquet(
         STREETSCOPE / "data" / city / "gps_index" / "gps_timeseries.parquet",
@@ -118,8 +118,8 @@ def frame_speed(city, data):
     start = before.where(before["video_id"] == at["video_id"], at)
     end = after.where(after["video_id"] == at["video_id"], at)
     seconds = (end["gps_datetime"] - start["gps_datetime"]).dt.total_seconds()
-    metres = haversine_m(start["lat"], start["lon"], end["lat"], end["lon"])
-    speed = (metres / seconds).where(seconds >= SPEED_HALF_WINDOW_SEC)
+    meters = haversine_m(start["lat"], start["lon"], end["lat"], end["lon"])
+    speed = (meters / seconds).where(seconds >= SPEED_HALF_WINDOW_SEC)
     # A motorbike in city traffic does not exceed 144 km/h; faster is a GPS jump.
     speed = speed.where(speed <= MAX_PLAUSIBLE_SPEED_MPS)
     return speed.round(2).to_numpy()
@@ -320,7 +320,7 @@ def gopro_extracted_frames(images):
             }
         )
         # Whether a frame falls in the first half of its video's saved frames,
-        # to check that annotation did not favour the start or end of a ride.
+        # to check that annotation did not favor the start or end of a ride.
         table["early"] = table.groupby("video")["index"].rank(pct=True) <= 0.5
         counts = table.groupby("video").agg(
             saved=("annotated", "size"),
