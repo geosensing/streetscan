@@ -1,22 +1,18 @@
-\documentclass[12pt]{article}
+\documentclass[11pt]{article}
+\usepackage{working-paper}
 
-\usepackage[margin=1in]{geometry}
-\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{lmodern}
-\usepackage{amsmath,amssymb,amsthm}
+
+\usepackage{amsmath,amsthm}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{float}
 \usepackage{graphicx}
 \usepackage{adjustbox}
 \usepackage{enumitem}
-\usepackage{setspace}
-\usepackage{natbib}
-\usepackage{microtype}
-\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 
-\onehalfspacing
+\usepackage[hidelinks]{hyperref}
+
 \setlist[itemize]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=18pt}
 \setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=18pt}
 
@@ -34,7 +30,7 @@
 \newcommand{\sample}{\mathcal{S}}
 \newcommand{\universe}{\mathcal{U}}
 
-\title{Sampling Streets:\\
+\title{\scshape Sampling Streets:\\
 Design-Based Inference for Street-Level Field Measurement}
 \author{Varun K.R. \and Gaurav Sood\thanks{Data and code to reproduce every number in this paper are at \url{https://github.com/geosensing/streetscan}. The sampler, the route allocator, and the estimation package are at \url{https://github.com/geosensing}.}}
 \date{November 2026}
